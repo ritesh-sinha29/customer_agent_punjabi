@@ -10,6 +10,7 @@
     "format": "biome format --write"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1086.0",
     "@base-ui/react": "^1.6.0",
     "@better-auth/drizzle-adapter": "^1.6.23",
     "@neondatabase/serverless": "^1.1.0",
