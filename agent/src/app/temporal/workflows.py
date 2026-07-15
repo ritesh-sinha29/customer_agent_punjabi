@@ -17,10 +17,10 @@ class DocumentIngestionWorkflow:
         return await workflow.execute_activity(
             ingest_document_activity,
             args=[file_url, file_key, user_id],
-            schedule_to_close_timeout=timedelta(minutes=10),
+            schedule_to_close_timeout=timedelta(minutes=5),
             retry_policy=RetryPolicy(
                 initial_interval=timedelta(seconds=5),
                 backoff_coefficient=2.0,
-                maximum_attempts=5,
+                maximum_attempts=2,
             ),
         )
