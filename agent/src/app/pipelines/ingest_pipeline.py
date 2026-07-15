@@ -6,6 +6,7 @@ from src.app.services.document_loader import document_loader
 from src.app.services.chunking_service import chunking_service
 from src.app.services.embedding_service import embedding_service
 from src.app.services.pinecone_service import pinecone_service
+from src.app.services.llama_service import llama_service
 from src.app.core.status_manager import status_manager
 
 # Set up logging for console prints
@@ -62,7 +63,7 @@ class IngestPipeline:
             # Update step to parsing
             status_manager.update_status(doc_id, 2, "Parsing document structure and layout via LlamaParse...")
             
-            if document_loader.llama_service.check_connection():
+            if llama_service.check_connection():
                 try:
                     parsed_doc = await document_loader.parse_with_llamaparse(local_path)
                 except Exception as parse_err:
@@ -95,6 +96,7 @@ class IngestPipeline:
         chunks_output = []
         parent_chunks = []
         child_chunks = []
+        chunking_strategy = "semantic_hierarchical"
 
         try:
             hierarchical_result = chunking_service.chunk_hierarchical(

@@ -41,9 +41,16 @@ class StatusManager:
         if not self.client:
             return
             
+        # Clean the file_name by extracting the basename and stripping the unique upload ID/timestamp prefix
+        import os
+        import re
+        base_name = os.path.basename(file_name)
+        match = re.match(r"^\d+-[a-z0-9]+-(.+)$", base_name)
+        display_name = match.group(1) if match else base_name
+
         payload = {
             "job_id": job_id,
-            "file_name": file_name,
+            "file_name": display_name,
             "status": "processing",
             "current_step": 0,
             "step_message": "Job initiated",

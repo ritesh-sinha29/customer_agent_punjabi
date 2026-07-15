@@ -4,3 +4,4 @@ This document details the architecture, request life cycle, and workflow pattern
 
 ---
 
+uv run uvicorn src.app.main:app --reload

@@ -16,7 +16,7 @@ class DocumentLoader:
     MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB limit
 
     def __init__(self):
-        pass
+        self.llama_service = llama_service
 
     def download_file(self, file_url: str, file_key: str) -> str:
         """

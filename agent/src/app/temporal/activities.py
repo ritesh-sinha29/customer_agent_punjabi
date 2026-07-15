@@ -25,3 +25,12 @@ async def ingest_document_activity(
         job_id=job_id
     )
     return result
+
+@activity.defn
+async def update_failure_status_activity(job_id: str, error_message: str) -> None:
+    """
+    Temporal Activity that marks the job status as failed in Redis.
+    """
+    from src.app.core.status_manager import status_manager
+    activity.logger.info(f"Marking job {job_id} as failed in Redis: {error_message}")
+    status_manager.update_status(job_id, 0, error_message, status="failed")
