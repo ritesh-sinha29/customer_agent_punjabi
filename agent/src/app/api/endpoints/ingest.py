@@ -6,8 +6,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from temporalio.client import WorkflowExecutionStatus
-from temporalio.exceptions import RPCError
+from temporalio.client import WorkflowExecutionStatus, RPCError
 
 from src.app.temporal.temporal_client import get_temporal_client
 from src.app.temporal.workflows import DocumentIngestionWorkflow
