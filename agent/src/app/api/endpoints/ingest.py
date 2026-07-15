@@ -14,6 +14,10 @@ class IngestRequest(BaseModel):
     file_url: str = Field(..., description="The direct download URL of the uploaded file on Wasabi")
     file_key: str = Field(..., description="The S3 Object key of the uploaded file")
     userId: str = Field(..., description="The user ID of the document owner")
+    chunking_strategy: str = Field("structure_aware", description="Chunking strategy: 'structure_aware', 'semantic', or 'hierarchical'")
+    tenant: str = Field("default", description="Namespace / Tenancy key")
+    permissions: list[str] = Field(["read:all"], description="User permissions/roles for access control")
+    version: str = Field("1.0.0", description="Document revision version")
 
 @router.post("")
 async def start_ingestion(request: IngestRequest):
@@ -24,7 +28,15 @@ async def start_ingestion(request: IngestRequest):
         client = await get_temporal_client()
         await client.start_workflow(
             DocumentIngestionWorkflow.run,
-            args=[request.file_url, request.file_key, request.userId],
+            args=[
+                request.file_url, 
+                request.file_key, 
+                request.userId, 
+                request.chunking_strategy,
+                request.tenant,
+                request.permissions,
+                request.version
+            ],
             id=workflow_id,
             task_queue="ingestion-task-queue",
         )

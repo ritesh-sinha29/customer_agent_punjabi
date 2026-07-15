@@ -9,14 +9,23 @@ with workflow.unsafe.imports_passed_through():
 @workflow.defn
 class DocumentIngestionWorkflow:
     @workflow.run
-    async def run(self, file_url: str, file_key: str, user_id: str) -> dict:
+    async def run(
+        self, 
+        file_url: str, 
+        file_key: str, 
+        user_id: str, 
+        chunking_strategy: str = "structure_aware",
+        tenant: str = "default",
+        permissions: list[str] = None,
+        version: str = "1.0.0"
+    ) -> dict:
         """
         Orchestrates the document ingestion pipeline activity with configured retries.
         """
         # Execute the activity with an explicit Retry Policy
         return await workflow.execute_activity(
             ingest_document_activity,
-            args=[file_url, file_key, user_id],
+            args=[file_url, file_key, user_id, chunking_strategy, tenant, permissions or ["read:all"], version],
             schedule_to_close_timeout=timedelta(minutes=5),
             retry_policy=RetryPolicy(
                 initial_interval=timedelta(seconds=5),
