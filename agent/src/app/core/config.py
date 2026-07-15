@@ -11,5 +11,7 @@ class Settings:
     PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
     PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "customer-pb-agent")
     LLAMA_CLOUD_API_KEY: str = os.getenv("LLAMA_CLOUD_API_KEY", "")
+    EMBEDDING_API_URL: str = os.getenv("EMBEDDING_API_URL", "")
+    UPSTASH_REDIS_URL: str = os.getenv("UPSTASH_REDIS_URL", "")
 
 settings = Settings()
