@@ -68,7 +68,6 @@ async def trigger_workflow():
     file_url = f"http://127.0.0.1:{PORT}/demo.md"
     file_key = "demo.md"
     user_id = "demo-user-111"
-    chunking_strategy = "structure_aware"
     tenant = "demo-tenant-punjabi"
     permissions = ["read:demo"]
     version = "1.0.0"
@@ -84,7 +83,6 @@ async def trigger_workflow():
         print(f"  Execution Mode: Direct Local Execution (Temporal Offline)")
     print(f"  File URL:       {file_url}")
     print(f"  Tenant:         {tenant}")
-    print(f"  Strategy:       {chunking_strategy}")
     
     start_time = time.time()
     
@@ -95,7 +93,7 @@ async def trigger_workflow():
             print("Waiting for result...")
             result = await client.execute_workflow(
                 DocumentIngestionWorkflow.run,
-                args=[file_url, file_key, user_id, chunking_strategy, tenant, permissions, version],
+                args=[file_url, file_key, user_id, tenant, permissions, version, workflow_id],
                 id=workflow_id,
                 task_queue=task_queue,
             )
@@ -107,10 +105,10 @@ async def trigger_workflow():
                 file_url=file_url,
                 file_key=file_key,
                 user_id=user_id,
-                chunking_strategy=chunking_strategy,
                 tenant=tenant,
                 permissions=permissions,
-                version=version
+                version=version,
+                job_id=workflow_id
             )
         
         end_time = time.time()

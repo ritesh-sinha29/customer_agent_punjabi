@@ -319,19 +319,18 @@ class ChunkingService:
         markdown_text: str, 
         doc_id: str,
         parent_max_chars: int = 3000,
-        child_max_chars: int = 600,
-        child_overlap_chars: int = 100
+        child_max_chars: int = 800,
+        similarity_threshold: float = 0.8
     ) -> Dict[str, Any]:
         """
-        Hierarchical Parent-Child Chunking:
-        - First creates parent chunks (large sections or structural blocks)
-        - Then splits each parent chunk into smaller child chunks
-        - Establishes relational mapping (parent_id on child chunks)
-        - Returns a dictionary containing lists of both 'parent_chunks' and 'child_chunks'
+        Combined Semantic & Hierarchical Parent-Child Chunking:
+        1. Parent chunks are created based on document headings (structural sections).
+        2. Child chunks within each parent section are created semantically based on sentence similarity drops.
+        3. Establishes relational mapping (parent_id on child chunks).
         """
-        logger.info("[Step 3 - Hierarchical] Starting parent-child split...")
+        logger.info("[Step 3 - Combined Semantic-Hierarchical] Starting parent-child split...")
         
-        # 1. Generate parent chunks by structure (using a larger threshold)
+        # 1. Generate parent chunks by structure (using a larger character limit)
         parent_chunks = self.chunk_by_structure(
             markdown_text=markdown_text,
             doc_id=doc_id,
@@ -342,16 +341,22 @@ class ChunkingService:
         child_chunks = []
         child_index = 0
         
-        # 2. For each parent chunk, split it into child chunks
+        # 2. For each parent chunk, split it into semantic child chunks
         for p_chunk in parent_chunks:
             p_id = p_chunk["chunk_id"]
             p_text = p_chunk["text"]
             
-            # Recursive split the parent text
-            sub_splits = self.split_text_recursive(p_text, child_max_chars, child_overlap_chars)
+            # Split parent text semantically using sentence embeddings
+            semantic_splits = self.chunk_semantically(
+                text=p_text, 
+                doc_id=doc_id, 
+                similarity_threshold=similarity_threshold,
+                max_chunk_size_chars=child_max_chars
+            )
             
             p_child_ids = []
-            for sub_text in sub_splits:
+            for sem_chunk in semantic_splits:
+                sub_text = sem_chunk["text"]
                 if not sub_text.strip():
                     continue
                 
@@ -368,7 +373,9 @@ class ChunkingService:
                     "metadata": {
                         "child_index": child_index,
                         "parent_id": p_id,
-                        "type": "hierarchical_child"
+                        "type": "hierarchical_child",
+                        "sentences_count": sem_chunk["metadata"].get("sentences_count", 0),
+                        "split_similarity": sem_chunk["metadata"].get("split_similarity", 1.0)
                     }
                 })
                 child_index += 1
@@ -377,7 +384,7 @@ class ChunkingService:
             p_chunk["metadata"]["child_ids"] = p_child_ids
             p_chunk["metadata"]["type"] = "hierarchical_parent"
 
-        logger.info(f"[Step 3 - Hierarchical] Generated {len(parent_chunks)} parent chunks and {len(child_chunks)} child chunks.")
+        logger.info(f"[Step 3 - Combined Semantic-Hierarchical] Generated {len(parent_chunks)} parent chunks and {len(child_chunks)} child chunks.")
         return {
             "parent_chunks": parent_chunks,
             "child_chunks": child_chunks
