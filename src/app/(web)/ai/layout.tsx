@@ -1,9 +1,9 @@
 "use client";
 
-import * as React from "react";
+import type * as React from "react";
 import {
-  SidebarProvider,
   SidebarInset,
+  SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/modules/ai/app-sidebar";
@@ -23,9 +23,7 @@ export default function AiLayout({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Page content */}
-          <main className="flex-1 flex flex-col">
-            {children}
-          </main>
+          <main className="flex-1 flex flex-col">{children}</main>
         </SidebarInset>
       </div>
     </SidebarProvider>

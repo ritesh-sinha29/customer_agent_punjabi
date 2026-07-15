@@ -1,11 +1,11 @@
 "use client";
 
-import * as React from "react";
+import type * as React from "react";
 import {
   Sidebar,
   SidebarContent,
-  SidebarHeader,
   SidebarFooter,
+  SidebarHeader,
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -14,11 +14,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         {/* Sidebar header - empty structure for now */}
       </SidebarHeader>
-      
+
       <SidebarContent>
         {/* Sidebar content - empty structure for now */}
       </SidebarContent>
-      
+
       <SidebarFooter>
         {/* Sidebar footer - empty structure for now */}
       </SidebarFooter>

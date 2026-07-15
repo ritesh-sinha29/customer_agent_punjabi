@@ -1,14 +1,14 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
 import {
   ArrowRight,
-  Sparkles,
-  ShieldCheck,
-  HeartPulse,
   Crown,
+  HeartPulse,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export default function Hero() {
@@ -83,7 +83,10 @@ export default function Hero() {
 
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-8 mb-6 relative z-30">
-          <Button asChild className="bg-[#2E3A2F] py-5! rounded-md cursor-pointer">
+          <Button
+            asChild
+            className="bg-[#2E3A2F] py-5! rounded-md cursor-pointer"
+          >
             <Link href="/ai" className="flex items-center gap-2">
               Get started with AI
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -94,9 +97,7 @@ export default function Hero() {
             variant="outline"
             className="border-2 border-[#2E3A2F] text-[#2E3A2F] hover:bg-[#2E3A2F]/5 rounded-md py-5! cursor-pointer"
           >
-            <Link href="/ai">
-              ਏ.ਆਈ. ਨਾਲ ਸ਼ੁਰੂ ਕਰੋ
-            </Link>
+            <Link href="/ai">ਏ.ਆਈ. ਨਾਲ ਸ਼ੁਰੂ ਕਰੋ</Link>
           </Button>
         </div>
 

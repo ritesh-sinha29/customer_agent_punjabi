@@ -1,5 +1,5 @@
-import Navbar from "@/modules/web/navbar";
 import Hero from "@/modules/web/hero";
+import Navbar from "@/modules/web/navbar";
 
 export default function WebHome() {
   return (
