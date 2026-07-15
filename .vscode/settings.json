@@ -1,0 +1,6 @@
+{
+  "git.ignoredRepositories": [
+    "r:/python/customer_agent/client",
+    "r:/python/customer_agent/agent"
+  ]
+}
