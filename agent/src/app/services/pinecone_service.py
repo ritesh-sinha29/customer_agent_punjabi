@@ -1,4 +1,7 @@
 from pinecone import Pinecone
+import os
+import certifi
+
 from src.app.core.config import settings
 
 class PineconeService:
