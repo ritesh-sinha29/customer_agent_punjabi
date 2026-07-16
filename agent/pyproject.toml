@@ -37,5 +37,10 @@ ignore = ["E501", "E402", "F841"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
-
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
