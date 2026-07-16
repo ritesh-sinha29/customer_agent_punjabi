@@ -12,7 +12,14 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                // Checkout using credentials so git operations (including push) are authenticated
+                checkout([$class: 'GitSCM', 
+                    branches: [[name: "*/dev"]], 
+                    userRemoteConfigs: [[
+                        credentialsId: 'github-creds', 
+                        url: 'https://github.com/ritesh-sinha29/customer_agent_punjabi'
+                    ]]
+                ])
             }
         }
 
