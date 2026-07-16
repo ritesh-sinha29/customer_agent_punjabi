@@ -6,6 +6,7 @@ pipeline {
         IMAGE_TAG = 'latest'
         CONTAINER_NAME = 'customer-agent-test-run'
         NETWORK_NAME = 'jenkins-network'
+        TEST_IMAGE_NAME = 'agent-test'
     }
 
     stages {
@@ -24,24 +25,35 @@ pipeline {
             }
         }
 
+        stage('Build Test Image') {
+            steps {
+                dir('agent') {
+                    // Build the self-contained test image (copies all code + dev deps)
+                    sh "docker build -t ${TEST_IMAGE_NAME} -f Dockerfile.test ."
+                }
+            }
+        }
+
         stage('Lint & Format Check') {
             steps {
-                // Run Ruff check and format inside a temporary python container
-                sh 'docker run --rm -v "$(pwd)/agent:/app" -w /app python:3.13-slim sh -c "pip install ruff && ruff check && ruff format --check"'
+                // Run Ruff check and format inside the test container
+                sh "docker run --rm ${TEST_IMAGE_NAME} uv run ruff check"
+                sh "docker run --rm ${TEST_IMAGE_NAME} uv run ruff format --check"
             }
         }
 
         stage('Unit Tests') {
             steps {
-                // Run pytest inside a temporary uv-alpine container
-                sh 'docker run --rm -v "$(pwd)/agent:/app" -w /app ghcr.io/astral-sh/uv:python3.13-alpine sh -c "uv sync && uv run pytest"'
+                // Run pytest inside the test container
+                sh "docker run --rm ${TEST_IMAGE_NAME} uv run pytest"
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Production Image') {
             steps {
                 dir('agent') {
-                    sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+                    // Build the minimal production container image
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
                 }
             }
         }
@@ -64,13 +76,13 @@ pipeline {
                     // Wait 3 seconds for FastAPI server to bind and start accepting connections
                     sleep 3
 
-                    // 2. Run k6 performance test inside the network pointing to the agent container's IP/port
+                    // 2. Run k6 by redirecting the script file content into the container's stdin.
+                    // This bypasses the need to mount local host directories in Docker-out-of-Docker setups.
                     sh """
-                        docker run --rm \
+                        docker run -i --rm \
                             --network ${NETWORK_NAME} \
-                            -v "\$(pwd)/agent/src/app/tests:/tests" \
                             -e TARGET_URL=http://${CONTAINER_NAME}:8000 \
-                            grafana/k6 run /tests/k6-load-test.js
+                            grafana/k6 run - < agent/src/app/tests/k6-load-test.js
                     """
                 }
             }
@@ -107,8 +119,9 @@ pipeline {
     post {
         always {
             script {
-                // Clean up Docker bridge network
+                // Clean up Docker bridge network and test image
                 sh "docker network rm ${NETWORK_NAME} || true"
+                sh "docker rmi ${TEST_IMAGE_NAME} || true"
             }
         }
     }
