@@ -32,6 +32,7 @@ interface CompletedDoc {
   file_size: number;
   uploaded_at: string;
   tenant: string;
+  wasabi_file_key?: string;
 }
 
 interface ActiveIngestion {
@@ -60,16 +61,22 @@ export default function DocumentsPage() {
   // Track open SSE connections to prevent leaks
   const sseConnections = useRef<Record<string, EventSource>>({});
 
-  // 1. Load completed documents from LocalStorage on mount
+  // 1. Load completed documents from Database API on mount
   useEffect(() => {
-    const cached = localStorage.getItem("punjabi_agent_documents");
-    if (cached) {
+    const fetchDocs = async () => {
       try {
-        setCompletedDocs(JSON.parse(cached));
+        const response = await fetch("/api/documents");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setCompletedDocs(data.documents);
+          }
+        }
       } catch (err) {
-        console.error("Failed to parse cached documents", err);
+        console.error("Failed to load documents from database", err);
       }
-    }
+    };
+    fetchDocs();
 
     // Recover active ingestions from SessionStorage if user refreshed page
     const recoveredActive = sessionStorage.getItem("punjabi_active_ingestions");
@@ -154,12 +161,6 @@ export default function DocumentsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Sync state to local storage when completed docs changes
-  const saveDocsToCache = (docs: CompletedDoc[]) => {
-    localStorage.setItem("punjabi_agent_documents", JSON.stringify(docs));
-    setCompletedDocs(docs);
-  };
-
   // Sync active ingestions to session storage
   const saveActiveIngestions = (
     ingestions: Record<string, ActiveIngestion>,
@@ -170,6 +171,7 @@ export default function DocumentsPage() {
     );
     setActiveIngestions(ingestions);
   };
+
 
   // 2. Map file types to public SVG icons
   const getFileIcon = (fileName: string) => {
@@ -292,23 +294,6 @@ export default function DocumentsPage() {
           eventSource.close();
           delete sseConnections.current[jobId];
 
-          // Append to completed documents list
-          setCompletedDocs((prev) => {
-            const newDoc: CompletedDoc = {
-              doc_id: jobId,
-              file_name: file_name || "Document",
-              file_size: 0, // Could be populated from local state
-              uploaded_at: new Date().toLocaleString(),
-              tenant: "demo-tenant-punjabi",
-            };
-            const updatedDocs = [newDoc, ...prev];
-            localStorage.setItem(
-              "punjabi_agent_documents",
-              JSON.stringify(updatedDocs),
-            );
-            return updatedDocs;
-          });
-
           // Remove from active list
           setActiveIngestions((prev) => {
             const updated = { ...prev };
@@ -413,7 +398,7 @@ export default function DocumentsPage() {
 
       const uploadResult = await uploadResponse.json();
       console.log(
-        `%c[Wasabi Upload] SUCCESS! File uploaded to Wasabi. Details:`,
+        `%c[Wasabi Upload] SUCCESS! File uploaded to Wasabi and saved in DB. Details:`,
         "color: #00aa00; font-weight: bold;",
         uploadResult,
       );
@@ -422,6 +407,10 @@ export default function DocumentsPage() {
 
       const actualFileUrl = uploadResult.data.url;
       const actualFileKey = uploadResult.data.key;
+      const actualFileId = uploadResult.data.id;
+      const actualFileName = uploadResult.data.name;
+      const actualFileSize = uploadResult.data.size;
+      const actualUploadedAt = uploadResult.data.uploadedAt;
 
       // Close Dialog
       setIsDialogOpen(false);
@@ -431,11 +420,24 @@ export default function DocumentsPage() {
       setIsUploading(false);
       setUploadProgress(0);
 
+      // Immediately add the new upload metadata to completed docs list so it is displayed instantly on the UI
+      setCompletedDocs((prev) => {
+        const newDoc: CompletedDoc = {
+          doc_id: actualFileId,
+          file_name: actualFileName,
+          file_size: actualFileSize,
+          uploaded_at: new Date(actualUploadedAt).toLocaleString(),
+          tenant: "default",
+          wasabi_file_key: actualFileKey,
+        };
+        return [newDoc, ...prev];
+      });
+
       console.log(
-        `[Ingestion] Triggering Python API ingestion workflow for key: ${actualFileKey}`,
+        `[Ingestion] Triggering Python API ingestion workflow for key: ${actualFileKey} and ID: ${actualFileId}`,
       );
 
-      // Trigger ingestion API endpoint
+      // Trigger ingestion API endpoint (passing actualFileId as job_id)
       const response = await fetch(`${BACKEND_URL}/api/v1/ingest`, {
         method: "POST",
         headers: {
@@ -445,9 +447,10 @@ export default function DocumentsPage() {
           file_url: actualFileUrl,
           file_key: actualFileKey,
           userId: "admin-client-user",
-          tenant: "demo-tenant-punjabi",
+          tenant: "default",
           permissions: ["read:demo"],
           version: "1.0.0",
+          job_id: actualFileId,
         }),
       });
 
@@ -466,8 +469,8 @@ export default function DocumentsPage() {
           ...prev,
           [jobId]: {
             job_id: jobId,
-            file_name: uploadResult.data.name || selectedFile.name,
-            file_size: uploadResult.data.size,
+            file_name: actualFileName,
+            file_size: actualFileSize,
             current_step: 0,
             step_message: "Job submitted to Temporal queue...",
             status: "processing",
@@ -493,26 +496,49 @@ export default function DocumentsPage() {
     }
   };
 
-  // 6. Delete completed document from Pinecone and UI lists
+  // 6. Delete completed document from Pinecone, Wasabi S3, and PostgreSQL DB
   const handleDeleteCompleted = async (docId: string, fileName: string) => {
     try {
+      // Find the document to get its file key
+      const doc = completedDocs.find((d) => d.doc_id === docId);
+      const fileKey = doc?.wasabi_file_key;
+
+      // 1. Delete from PostgreSQL Database
+      const dbResponse = await fetch("/api/documents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doc_id: docId }),
+      });
+      if (!dbResponse.ok) {
+        throw new Error("Failed to delete document metadata from database.");
+      }
+
+      // 2. Delete from Wasabi S3 (if file key is present)
+      if (fileKey) {
+        await fetch("/api/delete", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: fileKey }),
+        });
+      }
+
+      // 3. Delete from Pinecone
       const response = await fetch(
-        `${BACKEND_URL}/api/v1/ingest/${docId}?tenant=demo-tenant-punjabi`,
+        `${BACKEND_URL}/api/v1/ingest/${docId}?tenant=default`,
         {
           method: "DELETE",
         },
       );
 
       if (!response.ok) {
-        throw new Error("Failed to delete document from Pinecone.");
+        throw new Error("Failed to delete document vectors from Pinecone.");
       }
 
       // Filter local state
-      const updated = completedDocs.filter((d) => d.doc_id !== docId);
-      saveDocsToCache(updated);
+      setCompletedDocs((prev) => prev.filter((d) => d.doc_id !== docId));
 
       toast.success("Document deleted", {
-        description: `${fileName} vectors removed from Pinecone.`,
+        description: `${fileName} removed from database, Wasabi, and Pinecone.`,
       });
     } catch (err: any) {
       toast.error("Delete failed", {
@@ -520,6 +546,7 @@ export default function DocumentsPage() {
       });
     }
   };
+
 
   const removeFailedIngestion = (jobId: string) => {
     setActiveIngestions((prev) => {

@@ -8,6 +8,9 @@ import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { s3Client, validateFile, WASABI_BUCKET_NAME } from "@/lib/wasabi";
+import { db } from "@/db";
+import { document, user } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET(_request: NextRequest) {
   try {
@@ -138,15 +141,51 @@ export async function POST(request: NextRequest) {
     });
     console.log(`[Presigned URL] Generated pre-signed URL: ${signedUrl}`);
 
+    // Ensure fallback user row exists in DB to prevent foreign key violation
+    if (userId === "admin-client-user") {
+      const existingUser = await db
+        .select()
+        .from(user)
+        .where(eq(user.id, "admin-client-user"))
+        .limit(1);
+      if (existingUser.length === 0) {
+        await db.insert(user).values({
+          id: "admin-client-user",
+          name: "Admin Client",
+          email: "admin@vrsa.com",
+          emailVerified: true,
+        });
+      }
+    }
+
+    // Pre-generate unique document ID using UUID
+    const docId = crypto.randomUUID();
+
+    // Insert document metadata record immediately into database
+    const [insertedDoc] = await db
+      .insert(document)
+      .values({
+        id: docId,
+        fileName: file.name,
+        fileSize: file.size,
+        wasabiFileKey: key,
+        fileUrl: signedUrl,
+        userId: userId,
+      })
+      .returning();
+
+    console.log(`[Database Insert] Saved document to database with ID: ${insertedDoc.id}`);
+
     return NextResponse.json({
       success: true,
-      message: "File uploaded successfully",
+      message: "File uploaded and recorded successfully",
       data: {
-        key,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: signedUrl,
+        id: insertedDoc.id,
+        key: insertedDoc.wasabiFileKey,
+        name: insertedDoc.fileName,
+        size: insertedDoc.fileSize,
+        url: insertedDoc.fileUrl,
+        uploadedAt: insertedDoc.uploadedAt,
       },
     });
   } catch (error: unknown) {
@@ -158,3 +197,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+
