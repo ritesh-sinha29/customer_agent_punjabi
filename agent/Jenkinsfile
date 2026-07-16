@@ -98,19 +98,25 @@ pipeline {
         }
 
         stage('Merge to main') {
-            when {
-                // Only execute merge flow if we are not already on the main branch
-                expression { env.BRANCH_NAME != 'main' }
-            }
             steps {
                 script {
-                    sh """
-                        git config user.name "Jenkins CI"
-                        git config user.email "jenkins@ci.local"
-                        git checkout main
-                        git merge origin/${env.BRANCH_NAME}
-                        git push origin main
-                    """
+                    // In standard Jenkins Git jobs, env.GIT_BRANCH is populated instead of env.BRANCH_NAME
+                    def branchName = env.GIT_BRANCH ?: 'dev'
+                    if (branchName.contains('/')) {
+                        branchName = branchName.substring(branchName.lastIndexOf('/') + 1)
+                    }
+
+                    if (branchName != 'main' && branchName != 'master' && branchName != 'HEAD') {
+                        sh """
+                            git config user.name "Jenkins CI"
+                            git config user.email "jenkins@ci.local"
+                            git checkout main
+                            git merge origin/${branchName}
+                            git push origin main
+                        """
+                    } else {
+                        echo "Skipping merge: Current branch is main, master, or HEAD (${branchName})"
+                    }
                 }
             }
         }
