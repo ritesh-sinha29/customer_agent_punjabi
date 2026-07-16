@@ -38,13 +38,79 @@ class EmbeddingService:
     async def get_dense_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Generates dense vector embeddings.
+        If OPENAI_API_KEY is configured, uses OpenAI's text-embedding-3-small (1024 dimensions).
         If EMBEDDING_API_URL is configured, queries the TEI/vLLM endpoint.
         Otherwise, runs embedding generation locally using SentenceTransformer.
         """
         if not texts:
             return []
 
-        # If TEI / vLLM server is configured
+        # 1. (Commented out for Jina testing) Try OpenAI embedding small (1024 dim) if configured
+        # if settings.OPENAI_API_KEY:
+        #     logger.info("[Step 4 - Embedding] Generating dense embeddings using OpenAI text-embedding-3-small (1024d)...")
+        #     try:
+        #         batch_size = 32
+        #         all_embeddings = []
+        #         headers = {
+        #             "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        #             "Content-Type": "application/json"
+        #         }
+        #         async with httpx.AsyncClient(timeout=30.0) as client:
+        #             for i in range(0, len(texts), batch_size):
+        #                 batch = texts[i:i + batch_size]
+        #                 response = await client.post(
+        #                     "https://api.openai.com/v1/embeddings",
+        #                     headers=headers,
+        #                     json={
+        #                         "input": batch,
+        #                         "model": "text-embedding-3-small",
+        #                         "dimensions": 1024
+        #                     }
+        #                 )
+        #                 if response.status_code == 200:
+        #                     res_json = response.json()
+        #                     embeddings = [item["embedding"] for item in res_json.get("data", [])]
+        #                     all_embeddings.extend(embeddings)
+        #                 else:
+        #                     raise RuntimeError(f"OpenAI API request failed: {response.text}")
+        #         return all_embeddings
+        #     except Exception as e:
+        #         logger.error(f"OpenAI embedding generation failed: {e}. Falling back...")
+
+        # 1.5. Try Jina embedding (1024 dim) if configured
+        if settings.JINA_API_KEY:
+            logger.info("[Step 4 - Embedding] Generating dense embeddings using Jina (1024d)...")
+            try:
+                batch_size = 32
+                all_embeddings = []
+                headers = {
+                    "Authorization": f"Bearer {settings.JINA_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    for i in range(0, len(texts), batch_size):
+                        batch = texts[i:i + batch_size]
+                        response = await client.post(
+                            "https://api.jina.ai/v1/embeddings",
+                            headers=headers,
+                            json={
+                                "input": batch,
+                                "model": "jina-embeddings-v3",
+                                "dimensions": 1024
+                            }
+                        )
+                        if response.status_code == 200:
+                            res_json = response.json()
+                            embeddings = [item["embedding"] for item in res_json.get("data", [])]
+                            all_embeddings.extend(embeddings)
+                        else:
+                            raise RuntimeError(f"Jina API request failed: {response.text}")
+                return all_embeddings
+            except Exception as e:
+                logger.error(f"Jina embedding generation failed: {e}. Falling back...")
+
+
+        # 2. If TEI / vLLM server is configured
         if self.api_url:
             logger.info(f"[Step 4 - Embedding] Fetching embeddings from remote TEI/vLLM: {self.api_url}")
             try:

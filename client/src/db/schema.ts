@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -71,3 +71,20 @@ export const verification = pgTable(
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
+
+export const document = pgTable(
+  "document",
+  {
+    id: text("id").primaryKey(),
+    fileName: text("file_name").notNull(),
+    fileSize: integer("file_size").notNull(),
+    wasabiFileKey: text("wasabi_file_key").notNull(),
+    fileUrl: text("file_url").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  },
+  (table) => [index("document_userId_idx").on(table.userId)],
+);
+

@@ -23,11 +23,13 @@ class IngestRequest(BaseModel):
     tenant: str = Field("default", description="Namespace / Tenancy key")
     permissions: list[str] = Field(["read:all"], description="User permissions/roles for access control")
     version: str = Field("1.0.0", description="Document revision version")
+    job_id: str | None = Field(None, description="Optional pre-generated job/document ID")
 
 @router.post("")
 async def start_ingestion(request: IngestRequest):
-    job_id = str(uuid.uuid4())
+    job_id = request.job_id or str(uuid.uuid4())
     workflow_id = f"ingest-{job_id}"
+
     
     # 1. Initialize job status in Upstash Redis
     status_manager.initialize_job(job_id, request.file_key)
