@@ -68,7 +68,7 @@ pipeline {
                     sh """
                         docker run --rm \
                             --network ${NETWORK_NAME} \
-                            -v "$(pwd)/agent/src/app/tests:/tests" \
+                            -v "\$(pwd)/agent/src/app/tests:/tests" \
                             -e TARGET_URL=http://${CONTAINER_NAME}:8000 \
                             grafana/k6 run /tests/k6-load-test.js
                     """
