@@ -45,25 +45,57 @@ class EmbeddingService:
         if not texts:
             return []
 
-        # 1. Try OpenAI embedding small (1024 dim) if configured
-        if settings.OPENAI_API_KEY:
-            logger.info("[Step 4 - Embedding] Generating dense embeddings using OpenAI text-embedding-3-small (1024d)...")
+        # 1. (Commented out for Jina testing) Try OpenAI embedding small (1024 dim) if configured
+        # if settings.OPENAI_API_KEY:
+        #     logger.info("[Step 4 - Embedding] Generating dense embeddings using OpenAI text-embedding-3-small (1024d)...")
+        #     try:
+        #         batch_size = 32
+        #         all_embeddings = []
+        #         headers = {
+        #             "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        #             "Content-Type": "application/json"
+        #         }
+        #         async with httpx.AsyncClient(timeout=30.0) as client:
+        #             for i in range(0, len(texts), batch_size):
+        #                 batch = texts[i:i + batch_size]
+        #                 response = await client.post(
+        #                     "https://api.openai.com/v1/embeddings",
+        #                     headers=headers,
+        #                     json={
+        #                         "input": batch,
+        #                         "model": "text-embedding-3-small",
+        #                         "dimensions": 1024
+        #                     }
+        #                 )
+        #                 if response.status_code == 200:
+        #                     res_json = response.json()
+        #                     embeddings = [item["embedding"] for item in res_json.get("data", [])]
+        #                     all_embeddings.extend(embeddings)
+        #                 else:
+        #                     raise RuntimeError(f"OpenAI API request failed: {response.text}")
+        #         return all_embeddings
+        #     except Exception as e:
+        #         logger.error(f"OpenAI embedding generation failed: {e}. Falling back...")
+
+        # 1.5. Try Jina embedding (1024 dim) if configured
+        if settings.JINA_API_KEY:
+            logger.info("[Step 4 - Embedding] Generating dense embeddings using Jina (1024d)...")
             try:
                 batch_size = 32
                 all_embeddings = []
                 headers = {
-                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Authorization": f"Bearer {settings.JINA_API_KEY}",
                     "Content-Type": "application/json"
                 }
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     for i in range(0, len(texts), batch_size):
                         batch = texts[i:i + batch_size]
                         response = await client.post(
-                            "https://api.openai.com/v1/embeddings",
+                            "https://api.jina.ai/v1/embeddings",
                             headers=headers,
                             json={
                                 "input": batch,
-                                "model": "text-embedding-3-small",
+                                "model": "jina-embeddings-v3",
                                 "dimensions": 1024
                             }
                         )
@@ -72,10 +104,11 @@ class EmbeddingService:
                             embeddings = [item["embedding"] for item in res_json.get("data", [])]
                             all_embeddings.extend(embeddings)
                         else:
-                            raise RuntimeError(f"OpenAI API request failed: {response.text}")
+                            raise RuntimeError(f"Jina API request failed: {response.text}")
                 return all_embeddings
             except Exception as e:
-                logger.error(f"OpenAI embedding generation failed: {e}. Falling back...")
+                logger.error(f"Jina embedding generation failed: {e}. Falling back...")
+
 
         # 2. If TEI / vLLM server is configured
         if self.api_url:
