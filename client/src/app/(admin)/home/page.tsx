@@ -204,16 +204,11 @@ export default function AdminPage() {
               height={48}
               className="opacity-70 mb-3"
             />
-            <p className="text-sm font-semibold text-muted-foreground">
-              No documents uploaded yet
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload files on the Ingestion Portal to see them here.
-            </p>
+
             <Link href="/home/documents" passHref legacyBehavior>
               <Button
                 size="sm"
-                className="bg-[#5F7560] hover:bg-[#4E614F] text-white mt-4 rounded-lg"
+                className="bg-[#5F7560] hover:bg-[#4E614F] text-white mt-1 rounded-md"
               >
                 Go to Documents Portal
               </Button>

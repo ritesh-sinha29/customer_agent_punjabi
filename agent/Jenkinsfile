@@ -1,0 +1,115 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = 'customer-agent'
+        IMAGE_TAG = 'latest'
+        CONTAINER_NAME = 'customer-agent-test-run'
+        NETWORK_NAME = 'jenkins-network'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Create Network') {
+            steps {
+                script {
+                    // Create docker network so the agent and k6 containers can speak to each other
+                    sh "docker network create ${NETWORK_NAME} || true"
+                }
+            }
+        }
+
+        stage('Lint & Format Check') {
+            steps {
+                // Run Ruff check and format inside a temporary python container
+                sh 'docker run --rm -v "$(pwd)/agent:/app" -w /app python:3.13-slim sh -c "pip install ruff && ruff check && ruff format --check"'
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                // Run pytest inside a temporary uv-alpine container
+                sh 'docker run --rm -v "$(pwd)/agent:/app" -w /app ghcr.io/astral-sh/uv:python3.13-alpine sh -c "uv sync && uv run pytest"'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir('agent') {
+                    sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+                }
+            }
+        }
+
+        stage('k6 Performance Test') {
+            steps {
+                script {
+                    // 1. Run the newly built container in background connected to the bridge network
+                    sh """
+                        docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            --network ${NETWORK_NAME} \
+                            -e PINECONE_API_KEY=dummy_key \
+                            -e PINECONE_ENVIRONMENT=dummy_env \
+                            -e PINECONE_INDEX_NAME=dummy_index \
+                            -e LLAMA_CLOUD_API_KEY=dummy_key \
+                            ${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+
+                    // Wait 3 seconds for FastAPI server to bind and start accepting connections
+                    sleep 3
+
+                    // 2. Run k6 performance test inside the network pointing to the agent container's IP/port
+                    sh """
+                        docker run --rm \
+                            --network ${NETWORK_NAME} \
+                            -v "$(pwd)/agent/src/app/tests:/tests" \
+                            -e TARGET_URL=http://${CONTAINER_NAME}:8000 \
+                            grafana/k6 run /tests/k6-load-test.js
+                    """
+                }
+            }
+            post {
+                always {
+                    script {
+                        // 3. Cleanup the running agent container immediately after tests complete
+                        sh "docker stop ${CONTAINER_NAME} || true"
+                        sh "docker rm ${CONTAINER_NAME} || true"
+                    }
+                }
+            }
+        }
+
+        stage('Merge to main') {
+            when {
+                // Only execute merge flow if we are not already on the main branch
+                expression { env.BRANCH_NAME != 'main' }
+            }
+            steps {
+                script {
+                    sh """
+                        git config user.name "Jenkins CI"
+                        git config user.email "jenkins@ci.local"
+                        git checkout main
+                        git merge origin/${env.BRANCH_NAME}
+                        git push origin main
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Clean up Docker bridge network
+                sh "docker network rm ${NETWORK_NAME} || true"
+            }
+        }
+    }
+}
