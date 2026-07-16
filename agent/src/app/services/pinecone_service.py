@@ -1,9 +1,12 @@
 import logging
 from typing import Any, Dict, List
+
 from pinecone import Pinecone, ServerlessSpec
+
 from src.app.core.config import settings
 
 logger = logging.getLogger("PineconeService")
+
 
 class PineconeService:
     def __init__(self):
@@ -11,7 +14,7 @@ class PineconeService:
         self.index_name = settings.PINECONE_INDEX_NAME
         self.pc = None
         self.index = None
-        
+
         if self.api_key:
             try:
                 self.pc = Pinecone(api_key=self.api_key)
@@ -28,7 +31,9 @@ class PineconeService:
         try:
             self.index = self.pc.Index(self.index_name)
         except Exception as e:
-            logger.warning(f"Index '{self.index_name}' could not be bound (may not exist yet): {e}")
+            logger.warning(
+                f"Index '{self.index_name}' could not be bound (may not exist yet): {e}"
+            )
 
     def get_index(self):
         return self.index
@@ -45,9 +50,11 @@ class PineconeService:
         try:
             # List existing indexes
             existing_indexes = [idx.name for idx in self.pc.list_indexes()]
-            
+
             if self.index_name not in existing_indexes:
-                logger.info(f"[Step 6 - Pinecone] Creating Serverless Index '{self.index_name}' (dim={dimension}, metric={metric})...")
+                logger.info(
+                    f"[Step 6 - Pinecone] Creating Serverless Index '{self.index_name}' (dim={dimension}, metric={metric})..."
+                )
                 # Create index with serverless spec
                 self.pc.create_index(
                     name=self.index_name,
@@ -55,17 +62,21 @@ class PineconeService:
                     metric=metric,
                     spec=ServerlessSpec(
                         cloud="aws",
-                        region="us-east-1"  # Default serverless region
-                    )
+                        region="us-east-1",  # Default serverless region
+                    ),
                 )
-                logger.info(f"[Step 6 - Pinecone] Index '{self.index_name}' created successfully.")
+                logger.info(
+                    f"[Step 6 - Pinecone] Index '{self.index_name}' created successfully."
+                )
             else:
-                logger.info(f"[Step 6 - Pinecone] Index '{self.index_name}' already exists.")
-            
+                logger.info(
+                    f"[Step 6 - Pinecone] Index '{self.index_name}' already exists."
+                )
+
             # Rebind index handle
             self.initialize_index()
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to check/create Pinecone index: {e}")
             return False
@@ -79,20 +90,21 @@ class PineconeService:
             logger.error("Pinecone index is not initialized.")
             return False
 
-        logger.info(f"[Step 6 - Pinecone] Purging existing vectors for doc_id={doc_id} in namespace='{namespace or 'default'}'...")
+        logger.info(
+            f"[Step 6 - Pinecone] Purging existing vectors for doc_id={doc_id} in namespace='{namespace or 'default'}'..."
+        )
         try:
             # Delete by metadata filter
-            self.index.delete(
-                filter={"doc_id": {"$eq": doc_id}},
-                namespace=namespace
-            )
+            self.index.delete(filter={"doc_id": {"$eq": doc_id}}, namespace=namespace)
             logger.info(f"[Step 6 - Pinecone] Purge completed for doc_id={doc_id}")
             return True
         except Exception as e:
             logger.error(f"Failed to delete vectors by doc_id: {e}")
             return False
 
-    def upsert_vectors(self, vectors: List[Dict[str, Any]], namespace: str = None) -> int:
+    def upsert_vectors(
+        self, vectors: List[Dict[str, Any]], namespace: str = None
+    ) -> int:
         """
         Upserts a list of vectors to Pinecone in batches of 100.
         Each vector is represented as a dictionary:
@@ -114,19 +126,21 @@ class PineconeService:
         total_upserted = 0
         ns_str = namespace or "default"
 
-        logger.info(f"[Step 6 - Pinecone] Upserting {len(vectors)} vectors in batches of {batch_size} to namespace '{ns_str}'...")
+        logger.info(
+            f"[Step 6 - Pinecone] Upserting {len(vectors)} vectors in batches of {batch_size} to namespace '{ns_str}'..."
+        )
 
         try:
             for i in range(0, len(vectors), batch_size):
-                batch = vectors[i:i + batch_size]
-                
+                batch = vectors[i : i + batch_size]
+
                 # Format to Pinecone tuple/dict layout
                 upsert_payload = []
                 for vec in batch:
                     item = {
                         "id": vec["id"],
                         "values": vec["values"],
-                        "metadata": vec["metadata"]
+                        "metadata": vec["metadata"],
                     }
                     if "sparse_values" in vec and vec["sparse_values"]:
                         item["sparse_values"] = vec["sparse_values"]
@@ -135,7 +149,9 @@ class PineconeService:
                 res = self.index.upsert(vectors=upsert_payload, namespace=namespace)
                 total_upserted += res.get("upserted_count", len(batch))
 
-            logger.info(f"[Step 6 - Pinecone] Upsert completed. Total vectors upserted: {total_upserted}")
+            logger.info(
+                f"[Step 6 - Pinecone] Upsert completed. Total vectors upserted: {total_upserted}"
+            )
             return total_upserted
         except Exception as e:
             logger.error(f"Error during Pinecone upsert: {e}")
@@ -150,5 +166,6 @@ class PineconeService:
         except Exception as e:
             logger.warning(f"Pinecone connection check failed: {e}")
             return False
+
 
 pinecone_service = PineconeService()

@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables from the agent's root directory .env file, overriding system variables
@@ -13,7 +14,11 @@ if openai_key:
     # Print the last 6 characters of the key
     print(f"[Config] Loaded OpenAI API Key from .env (ending in: ...{openai_key[-6:]})")
 else:
-    print("[Config] ERROR: OPENAI_API_KEY is missing from environment/config!", file=sys.stderr)
+    print(
+        "[Config] ERROR: OPENAI_API_KEY is missing from environment/config!",
+        file=sys.stderr,
+    )
+
 
 class Settings:
     OPENAI_API_KEY: str = openai_key

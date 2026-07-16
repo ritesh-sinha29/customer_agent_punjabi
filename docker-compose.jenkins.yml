@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    container_name: jenkins-local
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      # Mount host's docker socket to enable Docker-out-of-Docker (DooD) build orchestrations
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the local project directory read-only for local Jenkins pipeline runs
+      - .:/workspace:ro
+
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  jenkins-data:

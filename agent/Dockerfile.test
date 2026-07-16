@@ -1,0 +1,13 @@
+FROM python:3.13-slim
+
+# Install uv package manager
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+# Copy all agent codebase files
+COPY . .
+
+# Sync all dependencies including dev tools (ruff, pytest)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen

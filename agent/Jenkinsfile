@@ -1,0 +1,143 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = 'customer-agent'
+        IMAGE_TAG = 'latest'
+        CONTAINER_NAME = 'customer-agent-test-run'
+        NETWORK_NAME = 'jenkins-network'
+        TEST_IMAGE_NAME = 'agent-test'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout using credentials so git operations (including push) are authenticated
+                checkout([$class: 'GitSCM', 
+                    branches: [[name: "*/dev"]], 
+                    userRemoteConfigs: [[
+                        credentialsId: 'github-creds', 
+                        url: 'https://github.com/ritesh-sinha29/customer_agent_punjabi'
+                    ]]
+                ])
+            }
+        }
+
+        stage('Create Network') {
+            steps {
+                script {
+                    // Create docker network so the agent and k6 containers can speak to each other
+                    sh "docker network create ${NETWORK_NAME} || true"
+                }
+            }
+        }
+
+        stage('Build Test Image') {
+            steps {
+                dir('agent') {
+                    // Build the self-contained test image (copies all code + dev deps)
+                    sh "docker build -t ${TEST_IMAGE_NAME} -f Dockerfile.test ."
+                }
+            }
+        }
+
+        stage('Lint & Format Check') {
+            steps {
+                // Run Ruff check and format inside the test container
+                sh "docker run --rm ${TEST_IMAGE_NAME} uv run ruff check"
+                sh "docker run --rm ${TEST_IMAGE_NAME} uv run ruff format --check || true"
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                // Run pytest inside the test container
+                sh "docker run --rm ${TEST_IMAGE_NAME} uv run pytest"
+            }
+        }
+
+        stage('Build Production Image') {
+            steps {
+                dir('agent') {
+                    // Build the minimal production container image
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                }
+            }
+        }
+
+        stage('k6 Performance Test') {
+            steps {
+                script {
+                    // 1. Run the newly built container in background connected to the bridge network
+                    sh """
+                        docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            --network ${NETWORK_NAME} \
+                            -e PINECONE_API_KEY=dummy_key \
+                            -e PINECONE_ENVIRONMENT=dummy_env \
+                            -e PINECONE_INDEX_NAME=dummy_index \
+                            -e LLAMA_CLOUD_API_KEY=dummy_key \
+                            ${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+
+                    // Wait 3 seconds for FastAPI server to bind and start accepting connections
+                    sleep 3
+
+                    // 2. Run k6 by redirecting the script file content into the container's stdin.
+                    // This bypasses the need to mount local host directories in Docker-out-of-Docker setups.
+                    sh """
+                        docker run -i --rm \
+                            --network ${NETWORK_NAME} \
+                            -e TARGET_URL=http://${CONTAINER_NAME}:8000 \
+                            grafana/k6 run - < agent/src/app/tests/k6-load-test.js
+                    """
+                }
+            }
+            post {
+                always {
+                    script {
+                        // 3. Cleanup the running agent container immediately after tests complete
+                        sh "docker stop ${CONTAINER_NAME} || true"
+                        sh "docker rm ${CONTAINER_NAME} || true"
+                    }
+                }
+            }
+        }
+
+        stage('Merge to main') {
+            steps {
+                script {
+                    // In standard Jenkins Git jobs, env.GIT_BRANCH is populated instead of env.BRANCH_NAME
+                    def branchName = env.GIT_BRANCH ?: 'dev'
+                    if (branchName.contains('/')) {
+                        branchName = branchName.substring(branchName.lastIndexOf('/') + 1)
+                    }
+
+                    if (branchName != 'main' && branchName != 'master' && branchName != 'HEAD') {
+                        withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                            sh """
+                                git config user.name "Jenkins CI"
+                                git config user.email "jenkins@ci.local"
+                                git checkout main
+                                git merge origin/${branchName}
+                                git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/ritesh-sinha29/customer_agent_punjabi.git main
+                            """
+                        }
+                    } else {
+                        echo "Skipping merge: Current branch is main, master, or HEAD (${branchName})"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Clean up Docker bridge network and test image
+                sh "docker network rm ${NETWORK_NAME} || true"
+                sh "docker rmi ${TEST_IMAGE_NAME} || true"
+            }
+        }
+    }
+}
