@@ -1,30 +1,26 @@
 "use client";
 
 import type * as React from "react";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/modules/ai/app-sidebar";
 
 export default function AiLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-zinc-50 text-[#2E3A2F]">
+      <div className="flex min-h-screen w-full bg-white  select-none">
         {/* AppSidebar component from modules/ai */}
         <AppSidebar className="border-r border-zinc-200 bg-white" />
 
-        {/* SidebarInset on the right side */}
-        <SidebarInset className="flex flex-col flex-1 min-h-screen bg-zinc-50">
-          {/* Top header bar with SidebarTrigger */}
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-zinc-100 px-4 bg-white">
-            <SidebarTrigger className="-ml-1" />
-          </header>
+        {/* Full space container */}
+        <div className="flex flex-col flex-1 min-h-screen relative overflow-hidden">
+          <div
+            className="absolute inset-0 -top-6 opacity-100 z-0 bg-cover bg-top bg-no-repeat pointer-events-none"
+            style={{ backgroundImage: "url('/ai-bg-1.png')" }}
+          />
 
           {/* Page content */}
-          <main className="flex-1 flex flex-col">{children}</main>
-        </SidebarInset>
+          <main className="flex-1 flex flex-col relative z-10">{children}</main>
+        </div>
       </div>
     </SidebarProvider>
   );

@@ -1,6 +1,18 @@
 "use client";
 
-import { Bot, Mic, Paperclip, Send, Sparkles, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  LeafyGreen,
+  Mic,
+  Milk,
+  Paperclip,
+  Send,
+  ShieldHalf,
+  Sparkles,
+  Syringe,
+  Trash2,
+  Vegan,
+} from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,6 +43,7 @@ import {
 } from "@/components/ui/message-scroller";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/lib/auth-client";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface ChatMessage {
   id: string;
@@ -40,10 +53,21 @@ interface ChatMessage {
 }
 
 const SUGGESTIONS = [
-  "What cattle feed is best for maximizing milk production?",
-  "How can I prevent calcium deficiency (milk fever) in cows?",
-  "Which veterinary medicines are recommended for mastitis?",
-  "What nutritional supplements are best for growing calves?",
+  "ਗਾਂ ਜਾਂ ਮੱਝ ਵਿੱਚ ਦੁੱਧ ਬੁਖਾਰ (ਕੈਲਸ਼ੀਅਮ ਦੀ ਕਮੀ) ਤੋਂ ਕਿਵੇਂ ਬਚਿਆ ਜਾਵੇ?",
+  "ਮੇਰੇ ਪਸ਼ੂ ਲਈ ਕਿਹੜਾ ਚਾਰਾ ਸਭ ਤੋਂ ਵਧੀਆ ਰਹੇਗਾ?",
+  "ਦੁੱਧ ਦੀ ਕੁਆਲਟੀ ਅਤੇ ਫੈਟ ਕਿਵੇਂ ਵਧਾਈਏ?",
+  "ਥਣੈਲਾ ਰੋਗ (ਮਾਸਟਾਈਟਿਸ) ਤੋਂ ਪਸ਼ੂਆਂ ਦਾ ਬਚਾਅ ਕਿਵੇਂ ਕਰੀਏ?",
+];
+
+const SUGGESTION_ICONS = [
+  // Icon 0: Shield with plus (for calcium deficiency / milk fever)
+  <ShieldHalf className="w-5 h-5 text-[#2E3A2F]" />,
+  // Icon 1: Feed / milk bottle (for best fodder/feed)
+  <Milk className="w-5 h-5 text-[#2E3A2F]" />,
+  // Icon 2: Calf/goat face (for milk quality / fat / growth)
+  <Vegan className="w-5 h-5 text-[#2E3A2F]" />,
+  // Icon 3: Udder (for mastitis)
+  <Syringe className="w-5 h-5 text-[#2E3A2F]" />,
 ];
 
 export default function AiPage() {
@@ -52,162 +76,76 @@ export default function AiPage() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
-  const formatTime = () => {
-    return new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const simulateAIResponse = (userQuery: string) => {
-    setIsTyping(true);
-
-    let reply =
-      "Hello! I am your VRSA Agrotech AI Assistant. Currently, my backend agent service is not connected, but I am ready to handle queries regarding cattle feed, veterinary medicines, and nutrition once the routes are established.";
-
-    const queryLower = userQuery.toLowerCase();
-    if (
-      queryLower.includes("milk") ||
-      queryLower.includes("feed") ||
-      queryLower.includes("maximize")
-    ) {
-      reply =
-        "For maximizing milk production, we recommend our VRSA Premium Cattle Feed. It contains balanced proteins, fats, and essential minerals to improve rumen fermentation and boost milk yield. Once our backend agent is configured, I can customize a complete feeding schedule for your herd.";
-    } else if (
-      queryLower.includes("fever") ||
-      queryLower.includes("calcium") ||
-      queryLower.includes("deficiency")
-    ) {
-      reply =
-        "Calcium deficiency (milk fever) in pregnant cows can be prevented by maintaining a proper dietary cation-anion difference (DCAD) during the dry period and providing oral calcium supplements immediately post-calving. When our AI agent backend is connected, I can help diagnose specific symptoms.";
-    } else if (
-      queryLower.includes("mastitis") ||
-      queryLower.includes("treatment") ||
-      queryLower.includes("medicine")
-    ) {
-      reply =
-        "Mastitis is a bacterial infection of the udder. Immediate treatment with intramammary antibiotics and anti-inflammatory medications is recommended under veterinary supervision. milker hygiene and post-milking teat dipping are key prevention steps. Once our backend is online, I will be able to retrieve our catalog and recommend matching veterinary medicines.";
-    } else if (
-      queryLower.includes("supplement") ||
-      queryLower.includes("calf") ||
-      queryLower.includes("growth")
-    ) {
-      reply =
-        "Growing calves need a high-protein starter feed along with calf growth supplements containing vitamins A, D3, E, and trace minerals like zinc and selenium. Let's connect our backend database next to suggest the exact products in our store!";
-    }
-
-    setTimeout(() => {
-      const botMsg: ChatMessage = {
-        id: Math.random().toString(36).substring(7),
-        role: "assistant",
-        content: reply,
-        timestamp: formatTime(),
-      };
-      setMessages((prev) => [...prev, botMsg]);
-      setIsTyping(false);
-    }, 1200);
-  };
-
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isTyping) return;
-
-    const userMsg: ChatMessage = {
-      id: Math.random().toString(36).substring(7),
-      role: "user",
-      content: input.trim(),
-      timestamp: formatTime(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    const currentInput = input.trim();
-    setInput("");
-
-    simulateAIResponse(currentInput);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend(e);
-    }
-  };
-
-  const handleSuggestionClick = (suggestion: string) => {
-    if (isTyping) return;
-
-    const userMsg: ChatMessage = {
-      id: Math.random().toString(36).substring(7),
-      role: "user",
-      content: suggestion,
-      timestamp: formatTime(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    simulateAIResponse(suggestion);
-  };
-
   return (
-    <div className="flex flex-col h-[calc(100vh-70px)] overflow-hidden bg-white font-sans w-full relative">
-      {/* Floating Clear Chat Button */}
-      {messages.length > 0 && (
-        <div className="absolute top-4 right-4 z-20">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMessages([])}
-            className="text-xs text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 border-zinc-200 rounded-xl gap-1.5 h-8 px-3 bg-white/90 backdrop-blur-xs shadow-2xs"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Chat</span>
-          </Button>
-        </div>
-      )}
+    <div className="flex flex-col h-screen overflow-hidden bg-transparent font-sans w-full relative">
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/20 to-white  pointer-events-none z-0" />
+
+      {/* Top Header Bar with SidebarTrigger */}
+      <header className="flex h-10 shrink-0 items-center justify-between px-6 pt-2 bg-transparent z-20 w-full">
+        <SidebarTrigger className="-ml-1 text-[#2E3A2F] hover:bg-[#2E3A2F]/5" />
+      </header>
 
       {/* Message Scroller occupies the whole space */}
       <div className="flex-1 min-h-0 relative w-full">
         <MessageScrollerProvider>
           <MessageScroller>
-            <MessageScrollerViewport className="p-4 md:p-8">
+            <MessageScrollerViewport className="pt-0">
               {messages.length === 0 ? (
-                <Empty className="border-0 bg-transparent flex flex-col justify-center items-center py-16 px-6 h-full min-h-full">
-                  <EmptyHeader>
-                    <EmptyMedia
-                      variant="icon"
-                      className="bg-[#2E3A2F]/10 text-[#2E3A2F] h-16 w-16 rounded-2xl flex items-center justify-center mb-4 mx-auto"
-                    >
-                      <Bot className="w-8 h-8 text-[#2E3A2F]" />
+                <Empty className="border-0 bg-transparent flex flex-col items-center justify-start py-8 px-6 w-full h-auto">
+                  <EmptyHeader className="!max-w-2xl">
+                    <EmptyMedia variant="default" className="-mt-6 mx-auto ">
+                      <img
+                        src="/vrsa_logo.svg"
+                        alt="VRSA Logo"
+                        className="w-28 h-28 object-contain"
+                      />
                     </EmptyMedia>
-                    <EmptyTitle className="text-2xl font-bold tracking-tight text-[#2E3A2F] mt-2 text-center">
-                      VRSA Agrotech AI Advisor
+                    <EmptyTitle className="text-3xl font-semibold tracking-tight text-center">
+                      VRSA Agrotech <span className="text-[#5F7560]">AI</span>{" "}
+                      Advisor
                     </EmptyTitle>
-                    <EmptyDescription className="text-zinc-500 text-sm max-w-sm mx-auto mt-2 text-center">
-                      Welcome to your AI assistant. Ask any questions about
-                      cattle feed, nutrition, diseases, treatments, or
-                      supplements.
+                    <EmptyDescription className="text-emerald-900 text-base max-w-3xl mx-auto mt-2 text-center leading-relaxed">
+                      ਪੰਜਾਬ ਭਰ ਦੇ ਪਸ਼ੂ ਪਾਲਕਾਂ ਦਾ ਭਰੋਸੇਯੋਗ ਸਾਥੀ — ਉੱਚ-ਗੁਣਵੱਤਾ
+                      ਪਸ਼ੂ ਪੋਸ਼ਣ ਅਤੇ ਵਿਗਿਆਨਕ ਤਰੀਕੇ ਨਾਲ ਤਿਆਰ ਕੀਤਾ ਸੰਤੁਲਿਤ ਚਾਰਾ।
                     </EmptyDescription>
+
+                    {/* Leaf Separator */}
+                    <div className="flex items-center gap-4 justify-center mt-4">
+                      <div className="h-[2px] bg-emerald-800/10 w-16 rounded-full" />
+                      <LeafyGreen className="w-5 h-5 text-[#5F7560] fill-[#5F7560]/20" />
+                      <div className="h-[2px] bg-emerald-800/10 w-16 rounded-full" />
+                    </div>
                   </EmptyHeader>
 
-                  <EmptyContent className="w-full max-w-3xl mt-12">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-                      {SUGGESTIONS.map((suggestion) => (
+                  <div className="w-full max-w-4xl mt-8 z-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                      {SUGGESTIONS.map((suggestion, index) => (
                         <button
                           key={suggestion}
                           type="button"
-                          onClick={() => handleSuggestionClick(suggestion)}
-                          className="text-left p-5 rounded-xl border border-zinc-200/80 bg-white hover:bg-zinc-50 hover:border-zinc-300 transition-all duration-200 shadow-2xs group cursor-pointer"
+                          // onClick={() => handleSuggestionClick(suggestion)}
+                          className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-200 bg-neutral-50 hover:bg-emerald-700/10 transition-all duration-200 shadow-2xs group cursor-pointer w-full text-left"
                         >
-                          <div className="text-xs font-semibold text-[#2E3A2F] mb-1.5 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-[#5F7560]" />
-                            <span>Suggestion</span>
+                          <div className="flex items-center gap-4 flex-1 pr-2">
+                            {/* Icon Circle Wrapper */}
+                            <div className="h-10 w-10 rounded-full bg-green-700/20 flex items-center justify-center shrink-0">
+                              {SUGGESTION_ICONS[index] || (
+                                <Sparkles className="w-4 h-4 text-[#2E3A2F]" />
+                              )}
+                            </div>
+                            <span className="text-[13px] font-medium text-[#2E3A2F] leading-snug">
+                              {suggestion}
+                            </span>
                           </div>
-                          <p className="text-xs text-zinc-600 leading-relaxed">
-                            {suggestion}
-                          </p>
+
+                          {/* Right Arrow Circle */}
+                          <div className="h-8 w-8 rounded-full border border-zinc-200 flex items-center justify-center shrink-0 text-zinc-400 group-hover:text-[#2E3A2F] group-hover:border-zinc-300 transition-all bg-white shadow-2xs">
+                            <ArrowRight className="w-4 h-4" />
+                          </div>
                         </button>
                       ))}
                     </div>
-                  </EmptyContent>
+                  </div>
                 </Empty>
               ) : (
                 <MessageScrollerContent className="max-w-3xl mx-auto w-full gap-6 pb-6">
@@ -228,9 +166,14 @@ export default function AiPage() {
                               </AvatarFallback>
                             </Avatar>
                           ) : (
-                            <Avatar className="h-8 w-8 border border-zinc-200 bg-[#2E3A2F]/10">
-                              <AvatarFallback className="bg-[#2E3A2F]/10 text-[#2E3A2F] font-bold text-xs">
-                                <Bot className="w-4 h-4 text-[#2E3A2F]" />
+                            <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent">
+                              <AvatarImage
+                                src="/vrsa_logo.svg"
+                                alt="VRSA Logo"
+                                className="object-contain p-1"
+                              />
+                              <AvatarFallback className="bg-transparent text-[#2E3A2F] font-bold text-xs">
+                                VRSA
                               </AvatarFallback>
                             </Avatar>
                           )}
@@ -259,9 +202,14 @@ export default function AiPage() {
                     <MessageScrollerItem>
                       <Message align="start">
                         <MessageAvatar>
-                          <Avatar className="h-8 w-8 border border-zinc-200 bg-[#2E3A2F]/10 animate-pulse">
-                            <AvatarFallback className="bg-[#2E3A2F]/10 text-[#2E3A2F] font-bold text-xs">
-                              <Bot className="w-4 h-4 text-[#2E3A2F]" />
+                          <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent animate-pulse">
+                            <AvatarImage
+                              src="/vrsa_logo.svg"
+                              alt="VRSA Logo"
+                              className="object-contain p-1"
+                            />
+                            <AvatarFallback className="bg-transparent text-[#2E3A2F] font-bold text-xs">
+                              VRSA
                             </AvatarFallback>
                           </Avatar>
                         </MessageAvatar>
@@ -291,17 +239,17 @@ export default function AiPage() {
       </div>
 
       {/* Textarea fixed at the bottom, centered */}
-      <div className="border-t border-zinc-100 bg-white p-4 md:p-6 shrink-0 w-full">
+      <div className="bg-transparent pb-4 px-4 md:px-6 shrink-0 w-full z-10">
         <div className="max-w-3xl mx-auto w-full">
           <form
-            onSubmit={handleSend}
-            className="relative flex flex-col rounded-2xl border border-zinc-200 bg-zinc-50/30 p-2.5 focus-within:border-zinc-300 focus-within:ring-1 focus-within:ring-zinc-300 transition-all"
+            // onSubmit={handleSend}
+            className="relative flex flex-col rounded-2xl border border-[#2E3A2F]/20 bg-white p-3 shadow-md focus-within:border-[#2E3A2F] focus-within:ring-1 focus-within:ring-[#2E3A2F]/10 transition-all"
           >
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message or select a suggestion..."
+              // onKeyDown={handleKeyDown}
+              placeholder="ਆਪਣਾ ਸਵਾਲ ਟਾਈਪ ਕਰੋ ਜਾਂ ਸੁਝਾਅ ਵਿੱਚੋਂ ਚੁਣੋ..."
               className="w-full bg-transparent border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none resize-none py-2 px-2 min-h-[44px] max-h-32 text-sm text-zinc-800 disabled:opacity-50"
               disabled={isTyping}
             />
@@ -314,7 +262,7 @@ export default function AiPage() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                  className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
                   disabled={isTyping}
                   title="Attach file (decorative)"
                 >
@@ -324,7 +272,7 @@ export default function AiPage() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                  className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
                   disabled={isTyping}
                   title="Voice input (decorative)"
                 >
@@ -336,13 +284,44 @@ export default function AiPage() {
               <Button
                 type="submit"
                 disabled={!input.trim() || isTyping}
-                className="h-8 px-4 bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] transition-all rounded-xl cursor-pointer disabled:opacity-40 shrink-0 flex items-center justify-center gap-1 text-xs font-semibold"
+                className="h-9 px-4 bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] transition-all rounded-full cursor-pointer disabled:opacity-40 shrink-0 flex items-center justify-center gap-1.5 text-xs font-semibold"
               >
-                <span>Send</span>
+                <span>ਭੇਜੋ</span>
                 <Send className="w-3.5 h-3.5" />
               </Button>
             </div>
           </form>
+
+          {/* Warning disclaimer below input form */}
+          <div className="mt-3 text-center flex items-center justify-center gap-1 text-[11px] text-zinc-500">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="w-3.5 h-3.5 text-zinc-400 shrink-0"
+            >
+              <path
+                d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12 16v-4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12 8h.01"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>
+              ਇਹ AI ਸਲਾਹਕਾਰ ਸਿਰਫ਼ ਜਾਣਕਾਰੀ ਦੇਣ ਲਈ ਹੈ, ਕਿਰਪਾ ਕਰਕੇ ਵੈਟਰਨਰੀ ਡਾਕਟਰ ਦੀ
+              ਸਲਾਹ ਵੀ ਲਵੋ।
+            </span>
+          </div>
         </div>
       </div>
     </div>
