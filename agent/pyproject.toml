@@ -17,6 +17,7 @@ dependencies = [
     "transformers>=5.13.1",
     "uvicorn>=0.51.0",
     "redis>=5.0.0",
+    "psycopg[binary]>=3.2.4",
 ]
 
 [dependency-groups]

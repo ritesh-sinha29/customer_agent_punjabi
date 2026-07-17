@@ -28,6 +28,8 @@ class Settings:
     EMBEDDING_API_URL: str = os.getenv("EMBEDDING_API_URL", "")
     UPSTASH_REDIS_URL: str = os.getenv("UPSTASH_REDIS_URL", "")
     JINA_API_KEY: str = os.getenv("JINA_API_KEY", "")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+
 
 
 settings = Settings()
