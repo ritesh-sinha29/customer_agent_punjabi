@@ -2,7 +2,9 @@
 
 import {
   ArrowRight,
+  ChevronDown,
   LeafyGreen,
+  Loader2,
   Mic,
   Milk,
   Paperclip,
@@ -11,10 +13,12 @@ import {
   Sparkles,
   Syringe,
   Trash2,
+  User,
   Vegan,
 } from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -42,7 +46,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Textarea } from "@/components/ui/textarea";
-import { useSession } from "@/lib/auth-client";
+import { signIn, signOut, useSession } from "@/lib/auth-client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface ChatMessage {
@@ -75,6 +79,28 @@ export default function AiPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    if (isRegistering) return;
+    setIsRegistering(true);
+    toast.loading("Connecting to Google...", {
+      id: "google-login",
+    });
+    try {
+      await signIn.social({
+        provider: "google",
+        callbackURL: window.location.href,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Google sign-in failed. Please try again.", {
+        id: "google-login",
+      });
+      setIsRegistering(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-transparent font-sans w-full relative">
@@ -83,6 +109,86 @@ export default function AiPage() {
       {/* Top Header Bar with SidebarTrigger */}
       <header className="flex h-10 shrink-0 items-center justify-between px-6 pt-2 bg-transparent z-20 w-full">
         <SidebarTrigger className="-ml-1 text-[#2E3A2F] hover:bg-[#2E3A2F]/5" />
+
+        {/* User Auth Section */}
+        <div className="flex items-center gap-3">
+          {session ? (
+            <div className="relative">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex items-center gap-2 hover:bg-zinc-50 px-2 py-1.5 rounded-full transition-all border border-zinc-100 cursor-pointer"
+              >
+                <Avatar className="h-7 w-7 border border-zinc-200 shadow-2xs select-none">
+                  <AvatarImage
+                    src={session.user.image || undefined}
+                    alt={session.user.name}
+                  />
+                  <AvatarFallback className="bg-[#2E3A2F]/10 text-[#2E3A2F] font-bold text-xs">
+                    {session.user.name
+                      ? session.user.name[0].toUpperCase()
+                      : "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs font-semibold text-[#2E3A2F] hidden sm:inline select-none">
+                  {session.user.name}
+                </span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${
+                    isDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {isDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setIsDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-zinc-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 origin-top-right">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await signOut({
+                            fetchOptions: {
+                              onSuccess: () => {
+                                window.location.reload();
+                              },
+                            },
+                          });
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Avatar
+                className="h-8 w-8 border border-zinc-200 bg-zinc-100 flex items-center justify-center cursor-pointer hover:bg-zinc-200 transition-colors"
+                onClick={handleGoogleSignIn}
+              >
+                <User className="w-4 h-4 text-zinc-500" />
+              </Avatar>
+              <Button
+                onClick={handleGoogleSignIn}
+                disabled={isRegistering}
+                className="bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] rounded-full px-4 h-8 text-xs font-medium transition-all flex items-center gap-2"
+              >
+                {isRegistering && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
+                Register
+              </Button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Message Scroller occupies the whole space */}
@@ -105,8 +211,8 @@ export default function AiPage() {
                       Advisor
                     </EmptyTitle>
                     <EmptyDescription className="text-emerald-900 text-base max-w-3xl mx-auto mt-2 text-center leading-relaxed">
-                      ਪੰਜਾਬ ਭਰ ਦੇ ਪਸ਼ੂ ਪਾਲਕਾਂ ਦਾ ਭਰੋਸੇਯੋਗ ਸਾਥੀ — ਉੱਚ-ਗੁਣਵੱਤਾ
-                      ਪਸ਼ੂ ਪੋਸ਼ਣ ਅਤੇ ਵਿਗਿਆਨਕ ਤਰੀਕੇ ਨਾਲ ਤਿਆਰ ਕੀਤਾ ਸੰਤੁਲਿਤ ਚਾਰਾ।
+                      ਪੰਜਾਬ ਭਰ ਦੇ ਪਸ਼ੂ ਪਾਲਕਾਂ ਦਾ ਭਰੋਸੇਯੋਗ ਸਾਥੀ — ਉੱਚ-ਗੁਣਵੱਤਾ ਪਸ਼ੂ ਪੋਸ਼ਣ ਅਤੇ
+                      ਵਿਗਿਆਨਕ ਤਰੀਕੇ ਨਾਲ ਤਿਆਰ ਕੀਤਾ ਸੰਤੁਲਿਤ ਚਾਰਾ।
                     </EmptyDescription>
 
                     {/* Leaf Separator */}
@@ -318,8 +424,8 @@ export default function AiPage() {
               />
             </svg>
             <span>
-              ਇਹ AI ਸਲਾਹਕਾਰ ਸਿਰਫ਼ ਜਾਣਕਾਰੀ ਦੇਣ ਲਈ ਹੈ, ਕਿਰਪਾ ਕਰਕੇ ਵੈਟਰਨਰੀ ਡਾਕਟਰ ਦੀ
-              ਸਲਾਹ ਵੀ ਲਵੋ।
+              ਇਹ AI ਸਲਾਹਕਾਰ ਸਿਰਫ਼ ਜਾਣਕਾਰੀ ਦੇਣ ਲਈ ਹੈ, ਕਿਰਪਾ ਕਰਕੇ ਵੈਟਰਨਰੀ ਡਾਕਟਰ ਦੀ ਸਲਾਹ
+              ਵੀ ਲਵੋ।
             </span>
           </div>
         </div>
