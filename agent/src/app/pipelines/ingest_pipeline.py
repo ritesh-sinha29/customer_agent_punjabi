@@ -197,8 +197,6 @@ class IngestPipeline:
                     "doc_id": doc_id,
                     "chunk_id": chunk_id,
                     "file_key": file_key,
-                    "user_id": user_id,
-                    "tenant": tenant,
                     "version": version,
                     "permissions": user_permissions,
                     "headings_path": chunk["headings_path"],
