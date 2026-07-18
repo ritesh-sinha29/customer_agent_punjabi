@@ -39,7 +39,7 @@ class PineconeService:
     def get_index(self):
         return self.index
 
-    def ensure_index(self, dimension: int = 1024, metric: str = "cosine") -> bool:
+    def ensure_index(self, dimension: int = 1024, metric: str = "dotproduct") -> bool:
         """
         Ensures that the Pinecone index exists.
         If it does not exist, creates a Serverless Index with the correct dimension.
@@ -144,7 +144,9 @@ class PineconeService:
                         "metadata": vec["metadata"],
                     }
                     if "sparse_values" in vec and vec["sparse_values"]:
-                        item["sparse_values"] = vec["sparse_values"]
+                        sparse_val = vec["sparse_values"]
+                        if sparse_val.get("indices") and sparse_val.get("values"):
+                            item["sparse_values"] = sparse_val
                     upsert_payload.append(item)
 
                 res = self.index.upsert(vectors=upsert_payload, namespace=namespace)
@@ -181,7 +183,8 @@ class PineconeService:
             if dense_vector is not None:
                 query_args["vector"] = dense_vector
             if sparse_vector is not None and self.supports_sparse:
-                query_args["sparse_vector"] = sparse_vector
+                if sparse_vector.get("indices") and sparse_vector.get("values"):
+                    query_args["sparse_vector"] = sparse_vector
                 
             res = self.index.query(**query_args)
             return [match.to_dict() for match in res.get("matches", [])]
