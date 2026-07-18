@@ -88,3 +88,42 @@ export const document = pgTable(
   (table) => [index("document_userId_idx").on(table.userId)],
 );
 
+export const query = pgTable(
+  "query",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    status: text("status").default("pending").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("query_userId_idx").on(table.userId)],
+);
+
+export const booking = pgTable(
+  "booking",
+  {
+    id: text("id").primaryKey(),
+    productName: text("product_name").notNull(),
+    qty: integer("qty").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    status: text("status").default("requested").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("booking_userId_idx").on(table.userId)],
+);
+
+

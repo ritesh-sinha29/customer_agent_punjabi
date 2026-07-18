@@ -26,6 +26,8 @@ export const metadata: Metadata = {
     "Nourishing Livestock, Empowering Farmers - Complete care for every animal.",
 };
 
+import { Toaster } from "@/components/ui/sonner";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -44,7 +46,10 @@ export default function RootLayout({
         gurmukhi.variable,
       )}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <Toaster position="top-center" />
+      </body>
     </html>
   );
 }

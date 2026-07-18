@@ -17,6 +17,10 @@ dependencies = [
     "transformers>=5.13.1",
     "uvicorn>=0.51.0",
     "redis>=5.0.0",
+    "psycopg[binary]>=3.2.4",
+    "logfire[system-metrics]>=4.37.0",
+    "langfuse>=4.14.0",
+    "modelscope>=1.38.1",
 ]
 
 [dependency-groups]
