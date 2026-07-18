@@ -21,6 +21,7 @@ class EmbeddingService:
         self.api_url = settings.EMBEDDING_API_URL
         self._local_model = None
         self.model_name = "mixedbread-ai/mxbai-embed-large-v1"  # 1024 dimensions model to match Pinecone index
+        self._client = None
 
     def _get_local_model(self):
         """
@@ -94,28 +95,29 @@ class EmbeddingService:
                     "Authorization": f"Bearer {settings.JINA_API_KEY}",
                     "Content-Type": "application/json",
                 }
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    for i in range(0, len(texts), batch_size):
-                        batch = texts[i : i + batch_size]
-                        response = await client.post(
-                            "https://api.jina.ai/v1/embeddings",
-                            headers=headers,
-                            json={
-                                "input": batch,
-                                "model": "jina-embeddings-v3",
-                                "dimensions": 1024,
-                            },
+                if self._client is None:
+                    self._client = httpx.AsyncClient(timeout=60.0)
+                for i in range(0, len(texts), batch_size):
+                    batch = texts[i : i + batch_size]
+                    response = await self._client.post(
+                        "https://api.jina.ai/v1/embeddings",
+                        headers=headers,
+                        json={
+                            "input": batch,
+                            "model": "jina-embeddings-v3",
+                            "dimensions": 1024,
+                        },
+                    )
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        embeddings = [
+                            item["embedding"] for item in res_json.get("data", [])
+                        ]
+                        all_embeddings.extend(embeddings)
+                    else:
+                        raise RuntimeError(
+                            f"Jina API request failed: {response.text}"
                         )
-                        if response.status_code == 200:
-                            res_json = response.json()
-                            embeddings = [
-                                item["embedding"] for item in res_json.get("data", [])
-                            ]
-                            all_embeddings.extend(embeddings)
-                        else:
-                            raise RuntimeError(
-                                f"Jina API request failed: {response.text}"
-                            )
                 return all_embeddings
             except Exception as e:
                 logger.error(f"Jina embedding generation failed: {e}. Falling back...")

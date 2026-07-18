@@ -14,10 +14,11 @@ class PineconeService:
         self.index_name = settings.PINECONE_INDEX_NAME
         self.pc = None
         self.index = None
+        self.supports_sparse = True
 
         if self.api_key:
             try:
-                self.pc = Pinecone(api_key=self.api_key)
+                self.pc = Pinecone(api_key=self.api_key, pool_threads=30)
                 # Note: We do not initialize the index immediately if it needs to be created
                 if self.index_name:
                     self.initialize_index()
@@ -29,7 +30,7 @@ class PineconeService:
         Attempts to bind to the specified index.
         """
         try:
-            self.index = self.pc.Index(self.index_name)
+            self.index = self.pc.Index(self.index_name, pool_threads=30)
         except Exception as e:
             logger.warning(
                 f"Index '{self.index_name}' could not be bound (may not exist yet): {e}"
@@ -155,6 +156,43 @@ class PineconeService:
             return total_upserted
         except Exception as e:
             logger.error(f"Error during Pinecone upsert: {e}")
+            raise e
+
+    def query_hybrid(
+        self,
+        dense_vector: List[float],
+        sparse_vector: Dict[str, Any] = None,
+        top_k: int = 5,
+        namespace: str = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Queries Pinecone index with dense and sparse vectors (hybrid search).
+        Returns a list of matching records with metadata.
+        """
+        if not self.index:
+            raise RuntimeError("Pinecone index is not initialized.")
+        
+        try:
+            query_args = {
+                "top_k": top_k,
+                "include_metadata": True,
+                "namespace": namespace
+            }
+            if dense_vector is not None:
+                query_args["vector"] = dense_vector
+            if sparse_vector is not None and self.supports_sparse:
+                query_args["sparse_vector"] = sparse_vector
+                
+            res = self.index.query(**query_args)
+            return [match.to_dict() for match in res.get("matches", [])]
+        except Exception as e:
+            if "sparse" in str(e).lower() and "sparse_vector" in query_args:
+                logger.warning("Pinecone index does not support sparse values. Caching capability and retrying with dense-only query.")
+                self.supports_sparse = False
+                query_args.pop("sparse_vector", None)
+                res = self.index.query(**query_args)
+                return [match.to_dict() for match in res.get("matches", [])]
+            logger.error(f"Error querying Pinecone: {e}")
             raise e
 
     def check_connection(self) -> bool:

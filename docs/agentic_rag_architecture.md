@@ -8,46 +8,6 @@ This document outlines the detailed system design, critiques, and implementation
 
 The agent is designed as a state-based loop (similar to a cognitive agent architecture like CoALA) rather than a simple sequential chain. 
 
-```mermaid
-graph TD
-    User([User]) -->|Sends query + multimodal inputs| API[FastAPI Gateway]
-    API -->|1. Parse Multi-modal| MM[LlamaParse / Vision LLM]
-    API -->|2. Route Job| Agent[Agentic Core (LangGraph / State Machine)]
-    
-    subgraph Query Optimization & Retrieval
-        Agent -->|3a. Rewrite & Multi-Query| LLMQ[Query Optimizer]
-        LLMQ -->|3b. Search (Dense + Sparse)| PC[(Pinecone DB - Semantics)]
-        PC -->|3c. Raw Chunks| Rerank[Reranker (ColBERT / Jina Rerank)]
-        Rerank -->|3d. Top K Relevant Chunks| Agent
-    end
-
-    subgraph Memory Engine
-        Agent -->|Read Context| MemRetrieve[Memory Retrieval Tool]
-        MemRetrieve -->|Get User Profile & Past Logs| MemDB[(Upstash Redis / PostgreSQL)]
-        
-        %% Background Compactor
-        API -->|4. Log Session Chat| ChatLog[(Redis Stream / DB)]
-        ChatLog -->|Read Logs| Temporal[Temporal Worker]
-        Temporal -->|Asynchronous Consolidation| MemDB
-    end
-    
-    subgraph Action & Tool Execution
-        Agent -->|5. Tool Calls| Tools[Tool Executor]
-        Tools -->|Create Bookings| BookingAPI[Wasabi/ERP Booking API]
-        Tools -->|Get Status| DeliveryAPI[Logistics Delivery Tracking]
-        Tools -->|Recommend Product| ProductCatalog[(Product DB)]
-    end
-
-    subgraph Feedback & Self-Reflection
-        Agent -->|6a. Generate Draft Answer| Reflect[Self-Reflection Loop]
-        Reflect -->|6b. Evaluate Groundedness & Relevance| Reflect
-        Reflect -->|6c. Re-run Search if Hallucinating| Agent
-        Reflect -->|6d. Approved Response| API
-    end
-    
-    API -->|Response| User
-```
-
 ---
 
 ## 2. Multi-Tiered Memory System
