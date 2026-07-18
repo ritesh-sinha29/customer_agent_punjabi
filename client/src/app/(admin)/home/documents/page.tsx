@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 // UI Components from local library
 import {
   Dialog,
@@ -171,7 +172,6 @@ export default function DocumentsPage() {
     );
     setActiveIngestions(ingestions);
   };
-
 
   // 2. Map file types to public SVG icons
   const getFileIcon = (fileName: string) => {
@@ -547,7 +547,6 @@ export default function DocumentsPage() {
     }
   };
 
-
   const removeFailedIngestion = (jobId: string) => {
     setActiveIngestions((prev) => {
       const updated = { ...prev };
@@ -561,115 +560,129 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      {/* Title Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 border border-border rounded-xl shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <FileText className="h-6 w-6 text-[#5F7560]" /> Ingestion Portal
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Upload and process layout-aware documents into the vector store.
-          </p>
-        </div>
+    <div className=" space-y-6 bg-white">
+      {/* Top Banner / Ingestion Portal Header */}
+      <div className="w-full p-4 rounded-xl shadow-sm border bg-linear-to-br from-amber-800 to-yellow-50 relative h-[185px] mt-3">
+        <div className="flex items-center justify-between h-full">
+          <div className="text-content flex flex-col justify-center h-full w-[55%] text-left text-white">
+            <h1 className="text-2xl font-semibold">Ingestion Portal</h1>
+            <p className="text-sm tracking-tight mt-2.5 text-white">
+              Upload and process layout-aware documents/ Files / products
+              catalog for Agent to serve customers.
+            </p>
+            <div className="mt-auto">
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="rounded-md text-xs text-black bg-white hover:bg-white/90 border-none shadow-xs flex items-center gap-2">
+                    <UploadCloud className="h-4 w-4" /> Upload new doc
+                  </Button>
+                </DialogTrigger>
 
-        {/* Upload dialog Trigger */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-[#5F7560] hover:bg-[#4E614F] text-white flex items-center gap-2">
-              <UploadCloud className="h-4 w-4" /> Upload new doc
-            </Button>
-          </DialogTrigger>
+                <DialogContent className="max-w-md bg-white border border-border rounded-lg p-6 shadow-xl">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-foreground">
+                      Upload Ingestion Document
+                    </DialogTitle>
+                  </DialogHeader>
 
-          <DialogContent className="max-w-md bg-white border border-border rounded-lg p-6 shadow-xl">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Upload Ingestion Document
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              {/* Drag and drop card */}
-              <div className="border-2 border-dashed border-muted-foreground/30 hover:border-[#5F7560] rounded-lg p-8 text-center cursor-pointer transition relative">
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  onChange={handleFileChange}
-                  disabled={isUploading}
-                />
-                <UploadCloud className="h-10 w-10 text-[#5F7560] mx-auto mb-2" />
-                <p className="text-sm font-semibold text-foreground">
-                  Click or drag file here to upload
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Supported: PDF, Docx, TXT, Excel, PPTX (Max 25MB)
-                </p>
-              </div>
-
-              {/* Selected File Details */}
-              {selectedFile && (
-                <div className="bg-muted/10 border border-border rounded-lg p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={getFileIcon(selectedFile.name)}
-                      alt="Icon"
-                      className="h-8 w-8 object-contain"
-                    />
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-foreground truncate max-w-[200px]">
-                        {selectedFile.name}
+                  <div className="space-y-4 py-4">
+                    {/* Drag and drop card */}
+                    <div className="border-2 border-dashed border-muted-foreground/30 hover:border-[#5F7560] rounded-lg p-8 text-center cursor-pointer transition relative">
+                      <input
+                        type="file"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={handleFileChange}
+                        disabled={isUploading}
+                      />
+                      <UploadCloud className="h-10 w-10 text-[#5F7560] mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-foreground">
+                        Click or drag file here to upload
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatFileSize(selectedFile.size)}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Supported: PDF, Docx, TXT, Excel, PPTX (Max 25MB)
                       </p>
                     </div>
+
+                    {/* Selected File Details */}
+                    {selectedFile && (
+                      <div className="bg-muted/10 border border-border rounded-lg p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getFileIcon(selectedFile.name)}
+                            alt="Icon"
+                            className="h-8 w-8 object-contain"
+                          />
+                          <div className="text-left">
+                            <p className="text-sm font-bold text-foreground truncate max-w-[200px]">
+                              {selectedFile.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(selectedFile.size)}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSelectedFile(null)}
+                          disabled={isUploading}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Progress Bar */}
+                    {isUploading && (
+                      <div className="space-y-2">
+                        <Progress
+                          value={uploadProgress}
+                          className="h-1.5 bg-muted"
+                        />
+                        <p className="text-xs text-center text-muted-foreground">
+                          Uploading to storage: {uploadProgress}%
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setSelectedFile(null)}
-                    disabled={isUploading}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
 
-              {/* Progress Bar */}
-              {isUploading && (
-                <div className="space-y-2">
-                  <Progress value={uploadProgress} className="h-1.5 bg-muted" />
-                  <p className="text-xs text-center text-muted-foreground">
-                    Uploading to storage: {uploadProgress}%
-                  </p>
-                </div>
-              )}
+                  {/* Actions */}
+                  <div className="flex justify-end gap-3 mt-4 border-t pt-4">
+                    <DialogClose asChild>
+                      <Button variant="outline" disabled={isUploading}>
+                        Cancel
+                      </Button>
+                    </DialogClose>
+                    <Button
+                      onClick={handleConfirmUpload}
+                      disabled={!selectedFile || isUploading}
+                      className="bg-[#5F7560] hover:bg-[#4E614F] text-white"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />{" "}
+                          Uploading...
+                        </>
+                      ) : (
+                        "Confirm Upload"
+                      )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
+          </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-3 mt-4 border-t pt-4">
-              <DialogClose asChild>
-                <Button variant="outline" disabled={isUploading}>
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button
-                onClick={handleConfirmUpload}
-                disabled={!selectedFile || isUploading}
-                className="bg-[#5F7560] hover:bg-[#4E614F] text-white"
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />{" "}
-                    Uploading...
-                  </>
-                ) : (
-                  "Confirm Upload"
-                )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <div className="3d-image">
+            <Image
+              alt="Ingestion Portal Hero"
+              className="absolute bottom-0 right-8"
+              height={210}
+              src="/5.svg"
+              width={210}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Grid of active processes and completed docs */}

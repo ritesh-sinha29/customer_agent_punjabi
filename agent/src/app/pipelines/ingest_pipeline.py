@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import os
 import uuid
 from typing import Any, Dict, List
 
@@ -59,9 +61,12 @@ class IngestPipeline:
             doc_id, 1, "Downloading document from storage S3 bucket..."
         )
 
+        local_path = None
         try:
             # Check size & download
-            local_path = document_loader.download_file(file_url, file_key)
+            local_path = await asyncio.to_thread(
+                document_loader.download_file, file_url, file_key
+            )
 
             # Update step to parsing
             status_manager.update_status(
@@ -73,9 +78,13 @@ class IngestPipeline:
                     parsed_doc = await document_loader.parse_with_llamaparse(local_path)
                 except Exception as parse_err:
                     logger.error(f"LlamaParse failed: {parse_err}. Falling back...")
-                    parsed_doc = document_loader.parse_fallback(local_path)
+                    parsed_doc = await asyncio.to_thread(
+                        document_loader.parse_fallback, local_path
+                    )
             else:
-                parsed_doc = document_loader.parse_fallback(local_path)
+                parsed_doc = await asyncio.to_thread(
+                    document_loader.parse_fallback, local_path
+                )
 
         except Exception as e:
             logger.error(f"Pipeline error during Download/Parsing stage: {e}")
@@ -84,6 +93,14 @@ class IngestPipeline:
                 doc_id, 0, f"Download/Parsing failed: {str(e)}", status="failed"
             )
             return {"success": False, "error": f"Download or parsing failed: {str(e)}"}
+        finally:
+            if local_path and os.path.exists(local_path):
+                try:
+                    os.unlink(local_path)
+                except Exception as cleanup_err:
+                    logger.warning(
+                        f"Could not clean up temp file {local_path}: {cleanup_err}"
+                    )
 
         parser_used = parsed_doc.get("parser_used", "unknown")
         pages = parsed_doc.get("pages", [])
@@ -112,7 +129,8 @@ class IngestPipeline:
         chunking_strategy = "semantic_hierarchical"
 
         try:
-            hierarchical_result = chunking_service.chunk_hierarchical(
+            hierarchical_result = await asyncio.to_thread(
+                chunking_service.chunk_hierarchical,
                 markdown_text=combined_markdown,
                 doc_id=doc_id,
                 parent_max_chars=3000,
@@ -156,7 +174,9 @@ class IngestPipeline:
 
         try:
             dense_vectors = await embedding_service.get_dense_embeddings(chunk_texts)
-            sparse_vectors = embedding_service.get_sparse_embeddings(chunk_texts)
+            sparse_vectors = await asyncio.to_thread(
+                embedding_service.get_sparse_embeddings, chunk_texts
+            )
         except Exception as e:
             logger.error(f"Pipeline error during Embedding stage: {e}")
             print(f"[-] PIPELINE FAILED: {e}")
@@ -179,10 +199,12 @@ class IngestPipeline:
 
         try:
             # Ensure Index exists
-            pinecone_service.ensure_index(dimension=vector_dim)
+            await asyncio.to_thread(pinecone_service.ensure_index, dimension=vector_dim)
 
             # De-duplicate: Purge old versions
-            pinecone_service.delete_by_doc_id(doc_id=doc_id, namespace=tenant)
+            await asyncio.to_thread(
+                pinecone_service.delete_by_doc_id, doc_id=doc_id, namespace=tenant
+            )
 
             status_manager.update_status(
                 doc_id, 6, f"Batch upserting {len(chunks_output)} chunks to Pinecone..."
@@ -225,8 +247,10 @@ class IngestPipeline:
                 pinecone_vectors.append(vector_payload)
 
             # Upsert
-            upserted_count = pinecone_service.upsert_vectors(
-                vectors=pinecone_vectors, namespace=tenant
+            upserted_count = await asyncio.to_thread(
+                pinecone_service.upsert_vectors,
+                vectors=pinecone_vectors,
+                namespace=tenant,
             )
 
         except Exception as e:
