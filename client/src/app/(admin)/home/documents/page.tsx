@@ -562,7 +562,7 @@ export default function DocumentsPage() {
   return (
     <div className=" space-y-6 bg-white">
       {/* Top Banner / Ingestion Portal Header */}
-      <div className="w-full p-4 rounded-xl shadow-sm border bg-linear-to-br from-amber-800 to-yellow-50 relative h-[185px] mt-3">
+      <div className="w-[95%] mx-auto p-4 rounded-xl shadow-sm border bg-linear-to-br from-amber-800 to-yellow-50 relative h-[185px] mt-3">
         <div className="flex items-center justify-between h-full">
           <div className="text-content flex flex-col justify-center h-full w-[55%] text-left text-white">
             <h1 className="text-2xl font-semibold">Ingestion Portal</h1>
@@ -786,7 +786,7 @@ export default function DocumentsPage() {
         )}
 
         {/* Completed Uploaded Docs Section */}
-        <div className="bg-white border border-border rounded-xl p-6 space-y-4 shadow-sm">
+        <div className=" space-y-4">
           <h2 className="text-md font-bold text-foreground flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-[#5F7560]" /> Uploaded
             Documents ({completedDocs.length})
