@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   ChevronDown,
+  Copy,
   LeafyGreen,
   Loader2,
   Mic,
@@ -12,6 +13,8 @@ import {
   ShieldHalf,
   Sparkles,
   Syringe,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   User,
   Vegan,
@@ -92,16 +95,13 @@ export default function AiPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
 
-  const [threadId] = useState(() => `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`);
+  const [threadId] = useState(
+    () => `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+  );
   const userId = session?.user?.id || "guest_user";
 
-  const {
-    messages,
-    isLoading,
-    pendingApproval,
-    sendMessage,
-    sendApproval,
-  } = useAgentSSE(threadId, userId);
+  const { messages, isLoading, pendingApproval, sendMessage, sendApproval } =
+    useAgentSSE(threadId, userId);
 
   const isTyping = isLoading;
 
@@ -124,6 +124,28 @@ export default function AiPage() {
 
     sendMessage(input.trim());
     setInput("");
+  };
+
+  const handleCopy = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.success("Response copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy text: ", err);
+      toast.error("Failed to copy response.");
+    }
+  };
+
+  const handleLike = (msgId: string) => {
+    toast.success("Thank you for your feedback!", {
+      description: "Response upvoted.",
+    });
+  };
+
+  const handleDislike = (msgId: string) => {
+    toast.success("Thank you for your feedback!", {
+      description: "Response downvoted.",
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -350,7 +372,7 @@ export default function AiPage() {
                               </AvatarFallback>
                             </Avatar>
                           ) : (
-                            <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent">
+                            <Avatar className="h-8 w-8 ">
                               <AvatarImage
                                 src="/vrsa_logo.svg"
                                 alt="VRSA Logo"
@@ -364,31 +386,38 @@ export default function AiPage() {
                         </MessageAvatar>
                         <MessageContent>
                           {msg.role === "assistant" && msg.reasoning && (
-                            <div className="mb-2 w-full max-w-full">
-                              {!msg.content ? (
-                                <div className="text-xs text-emerald-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-start gap-2 animate-pulse">
-                                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                                  <div>
-                                    <span className="font-bold block mb-0.5">Thinking...</span>
-                                    <span className="text-zinc-600 font-medium">{msg.reasoning}</span>
+                            <>
+                              {/* Case 1: Thinking phase (executing and no content yet) */}
+                              {isLoading &&
+                                msg.id === messages[messages.length - 1]?.id &&
+                                !msg.content && (
+                                  <div className="mb-2 w-full max-w-full">
+                                    <details
+                                      open
+                                      className="group text-xs text-emerald-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 select-none"
+                                    >
+                                      <summary className="cursor-pointer flex items-center justify-between list-none outline-none [&::-webkit-details-marker]:hidden">
+                                        <div className="flex items-center gap-2">
+                                          <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
+                                          <span className="font-bold">
+                                            Thinking...
+                                          </span>
+                                        </div>
+                                        <ChevronDown className="w-4 h-4 text-zinc-500 transition-transform duration-200 group-open:rotate-180" />
+                                      </summary>
+                                      <div className="mt-2 text-zinc-600 font-medium whitespace-pre-wrap leading-relaxed select-text">
+                                        {msg.reasoning}
+                                      </div>
+                                    </details>
                                   </div>
-                                </div>
-                              ) : (
-                                <details className="text-xs text-zinc-500 bg-zinc-50/50 border border-zinc-100 rounded-lg overflow-hidden group w-fit max-w-[280px] sm:max-w-md">
-                                  <summary className="px-3 py-1.5 font-semibold text-[#5F7560] cursor-pointer hover:bg-zinc-100/50 transition-colors flex items-center gap-1.5 select-none list-none outline-none">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
-                                    Reasoning
-                                  </summary>
-                                  <div className="px-3 pb-2 pt-1 border-t border-zinc-100/50 text-zinc-500 leading-relaxed font-normal">
-                                    {msg.reasoning}
-                                  </div>
-                                </details>
-                              )}
-                            </div>
+                                )}
+                            </>
                           )}
                           {msg.content && (
                             <Bubble
-                              variant={msg.role === "user" ? "default" : "muted"}
+                              variant={
+                                msg.role === "user" ? "default" : "muted"
+                              }
                             >
                               <BubbleContent
                                 className={
@@ -405,7 +434,50 @@ export default function AiPage() {
                               </BubbleContent>
                             </Bubble>
                           )}
-                          <MessageFooter>{msg.timestamp}</MessageFooter>
+                          <MessageFooter className="flex items-center gap-3 w-full mt-1 min-h-[24px]">
+                            <div className="flex items-center gap-2 text-neutral-700 text-xs font-medium">
+                              <span>{msg.timestamp}</span>
+                              {msg.duration !== undefined && (
+                                <span>
+                                  • Executed in {msg.duration.toFixed(1)}s
+                                </span>
+                              )}
+                            </div>
+                            {msg.role === "assistant" && msg.content && (
+                              <div className="flex items-center gap-0.5 ">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md text-zinc-600 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                                  onClick={() => handleCopy(msg.content)}
+                                  title="Copy response"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md text-zinc-600 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                                  onClick={() => handleLike(msg.id)}
+                                  title="Like response"
+                                >
+                                  <ThumbsUp className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md text-zinc-600 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                                  onClick={() => handleDislike(msg.id)}
+                                  title="Dislike response"
+                                >
+                                  <ThumbsDown className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </MessageFooter>
                         </MessageContent>
                       </Message>
                     </MessageScrollerItem>
@@ -417,19 +489,35 @@ export default function AiPage() {
                         <div className="flex items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
                           <p className="text-xs font-bold text-emerald-800">
-                            {lang === "en" ? "Action Required" : "ਕਾਰਵਾਈ ਦੀ ਲੋੜ ਹੈ"}
+                            {lang === "en"
+                              ? "Action Required"
+                              : "ਕਾਰਵਾਈ ਦੀ ਲੋੜ ਹੈ"}
                           </p>
                         </div>
                         <div className="text-xs text-zinc-700 space-y-1 bg-white/60 p-2.5 rounded-lg border border-zinc-100">
                           {pendingApproval.action === "booking" ? (
                             <div>
-                              <strong>{lang === "en" ? "Product" : "ਉਤਪਾਦ"}:</strong> {pendingApproval.details?.product_name}<br />
-                              <strong>{lang === "en" ? "Quantity" : "ਮਾਤਰਾ"}:</strong> {pendingApproval.details?.quantity}
+                              <strong>
+                                {lang === "en" ? "Product" : "ਉਤਪਾਦ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.product_name}
+                              <br />
+                              <strong>
+                                {lang === "en" ? "Quantity" : "ਮਾਤਰਾ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.quantity}
                             </div>
                           ) : (
                             <div>
-                              <strong>{lang === "en" ? "Title" : "ਸਿਰਲੇਖ"}:</strong> {pendingApproval.details?.title}<br />
-                              <strong>{lang === "en" ? "Description" : "ਵੇਰਵਾ"}:</strong> {pendingApproval.details?.description}
+                              <strong>
+                                {lang === "en" ? "Title" : "ਸਿਰਲੇਖ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.title}
+                              <br />
+                              <strong>
+                                {lang === "en" ? "Description" : "ਵੇਰਵਾ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.description}
                             </div>
                           )}
                         </div>
@@ -446,40 +534,43 @@ export default function AiPage() {
                             onClick={() => sendApproval(true)}
                             className="px-3.5 py-1.5 bg-[#2E3A2F] hover:bg-[#3E4E3F] text-white rounded-full text-xs font-semibold cursor-pointer transition-all shadow-3xs"
                           >
-                            {lang === "en" ? "Confirm & Proceed" : "ਪੁਸ਼ਟੀ ਕਰੋ ਅਤੇ ਅੱਗੇ ਵਧੋ"}
+                            {lang === "en"
+                              ? "Confirm & Proceed"
+                              : "ਪੁਸ਼ਟੀ ਕਰੋ ਅਤੇ ਅੱਗੇ ਵਧੋ"}
                           </button>
                         </div>
                       </div>
                     </MessageScrollerItem>
                   )}
 
-                  {isTyping && (
-                    <MessageScrollerItem>
-                      <Message align="start">
-                        <MessageAvatar>
-                          <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent animate-pulse">
-                            <AvatarImage
-                              src="/vrsa_logo.svg"
-                              alt="VRSA Logo"
-                              className="object-contain p-1"
-                            />
-                            <AvatarFallback className="bg-transparent text-[#2E3A2F] font-bold text-xs">
-                              VRSA
-                            </AvatarFallback>
-                          </Avatar>
-                        </MessageAvatar>
-                        <MessageContent>
-                          <Marker>
-                            <MarkerContent className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 rounded-2xl w-fit">
-                              <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.3s]" />
-                              <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.15s]" />
-                              <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce" />
-                            </MarkerContent>
-                          </Marker>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                  )}
+                  {isTyping &&
+                    messages[messages.length - 1]?.role !== "assistant" && (
+                      <MessageScrollerItem>
+                        <Message align="start">
+                          <MessageAvatar>
+                            <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent animate-pulse">
+                              <AvatarImage
+                                src="/vrsa_logo.svg"
+                                alt="VRSA Logo"
+                                className="object-contain p-1"
+                              />
+                              <AvatarFallback className="bg-transparent text-[#2E3A2F] font-bold text-xs">
+                                VRSA
+                              </AvatarFallback>
+                            </Avatar>
+                          </MessageAvatar>
+                          <MessageContent>
+                            <Marker>
+                              <MarkerContent className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 rounded-2xl w-fit">
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.3s]" />
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.15s]" />
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce" />
+                              </MarkerContent>
+                            </Marker>
+                          </MessageContent>
+                        </Message>
+                      </MessageScrollerItem>
+                    )}
                   {/* Scroll anchor */}
                   <MessageScrollerItem
                     scrollAnchor={true}
@@ -506,10 +597,13 @@ export default function AiPage() {
               onKeyDown={handleKeyDown}
               placeholder={
                 pendingApproval
-                  ? (lang === "en"
-                      ? "Please confirm or cancel the action above..."
-                      : "ਕਿਰਪਾ ਕਰਕੇ ਉੱਪਰ ਦਿੱਤੀ ਕਾਰਵਾਈ ਦੀ ਪੁਸ਼ਟੀ ਜਾਂ ਰੱਦ ਕਰੋ...")
-                  : (typedPlaceholder || (lang === "en" ? "Type your question or choose from suggestions..." : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ..."))
+                  ? lang === "en"
+                    ? "Please confirm or cancel the action above..."
+                    : "ਕਿਰਪਾ ਕਰਕੇ ਉੱਪਰ ਦਿੱਤੀ ਕਾਰਵਾਈ ਦੀ ਪੁਸ਼ਟੀ ਜਾਂ ਰੱਦ ਕਰੋ..."
+                  : typedPlaceholder ||
+                    (lang === "en"
+                      ? "Type your question or choose from suggestions..."
+                      : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ...")
               }
               className="w-full bg-transparent border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none resize-none py-2 px-2 min-h-[44px] max-h-32 text-sm text-zinc-800 disabled:opacity-50"
               disabled={isLoading || !!pendingApproval}
@@ -578,9 +672,7 @@ export default function AiPage() {
                 strokeLinejoin="round"
               />
             </svg>
-            <span>
-              {bottomDisclaimer}
-            </span>
+            <span>{bottomDisclaimer}</span>
           </div>
         </div>
       </div>
