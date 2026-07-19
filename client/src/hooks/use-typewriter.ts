@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 
 export function useTypewriter(
   words: string[],
-  typingSpeed = 30,      // Fast typing speed (ms per char)
-  deletingSpeed = 15,     // Fast deleting speed (ms per char)
-  delayBetweenWords = 2000 // How long to show the full suggestion
+  typingSpeed = 45, // Fast typing speed (ms per char)
+  deletingSpeed = 40, // Fast deleting speed (ms per char)
+  delayBetweenWords = 3000, // How long to show the full suggestion
 ) {
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentText, setCurrentText] = useState("");
@@ -47,7 +47,15 @@ export function useTypewriter(
     }
 
     return () => clearTimeout(timer);
-  }, [currentText, isDeleting, currentWordIndex, words, typingSpeed, deletingSpeed, delayBetweenWords]);
+  }, [
+    currentText,
+    isDeleting,
+    currentWordIndex,
+    words,
+    typingSpeed,
+    deletingSpeed,
+    delayBetweenWords,
+  ]);
 
   return currentText;
 }
