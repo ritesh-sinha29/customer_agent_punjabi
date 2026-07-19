@@ -11,6 +11,12 @@ export function useTypewriter(
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    setCurrentWordIndex(0);
+    setCurrentText("");
+    setIsDeleting(false);
+  }, [words]);
+
+  useEffect(() => {
     if (words.length === 0) return;
 
     let timer: NodeJS.Timeout;

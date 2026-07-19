@@ -59,7 +59,7 @@ async def rag_agent_node(state: AgentState, config: RunnableConfig) -> dict:
         "- Base your answer strictly on the provided documentation.\n"
         "- If the documentation does not contain enough information to answer the question, say clearly that you do not know the answer based on the current documentation.\n"
         "- Do not hallucinate or manufacture details.\n"
-        "- Respond in a clear, friendly tone. If the user asks in Punjabi or Hinglish, respond in their preferred language while remaining grounded in the retrieved facts."
+        "- Respond in a clear format. You must write your response in English only, even if the user asked their question in Punjabi or Hinglish."
     )
     
     llm = ChatOpenAI(

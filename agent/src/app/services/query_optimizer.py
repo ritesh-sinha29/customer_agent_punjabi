@@ -36,14 +36,15 @@ else:
 class QueryOptimizer:
     """
     Handles Query Re-writing and Multi-Query Expansion using Hugging Face Serverless Inference.
+    Falls back to OpenAI gpt-4.1-nano if Hugging Face execution fails.
     Features robust JSON extraction and full trace logs via Logfire and Langfuse.
     """
 
     def __init__(self):
-        # We clean the Hugging Face token in case of quotes
+        # Clean the Hugging Face token in case of quotes
         self.hf_token = os.getenv("HF_TOKEN", "").strip('"')
         
-        # We use Qwen-72B-Instruct for high quality multilingual capabilities
+        # Use Qwen-72B-Instruct for high quality multilingual capabilities
         self.model_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct"
         
         # Fallback model in case the 72B is overloaded
@@ -94,7 +95,6 @@ class QueryOptimizer:
             
         return []
 
-
     @logfire.instrument("optimize_query_hf")
     def optimize_query(
         self, 
@@ -103,8 +103,8 @@ class QueryOptimizer:
         user_id: str = "guest_user"
     ) -> List[str]:
         """
-        Takes conversation history + current user query, and expands it to 3 optimized queries.
-        Supports Punjabi translation/refinement and pronoun resolution.
+        Takes conversation history + current user query, and expands it to 3 optimized queries
+        using Hugging Face Serverless Qwen as primary, falling back to OpenAI (gpt-4.1-nano) if necessary.
         """
         # Format conversation context
         history_str = ""
@@ -116,7 +116,7 @@ class QueryOptimizer:
             "You are a search query optimizer for an agricultural and animal feed product database.\n"
             "Given a conversation history and a final user question:\n"
             "1. Resolve pronouns (e.g., 'it', 'them', 'dosage of this') using context.\n"
-            "2. If the user query is in Punjabi (native or transliterated Hinglish/Punjabi), translate agricultural terms into English search keywords (e.g., 'ਦੁੱਧ' or 'dudh' -> milk, 'ਥਣੈਲਾ' -> mastitis, 'ਬੁਖਾਰ' -> fever) and output terms in English.\n"
+            "2. If the user query is in Punjabi (native or transliterated Hinglish/Punjabi), translate agricultural terms into English search keywords (e.g., 'ਮੱਝ' or 'majj' -> buffalo, 'ਦੁੱਧ' or 'dudh' -> milk, 'ਥਣੈਲਾ' -> mastitis, 'ਬੁਖਾਰ' -> fever) and output terms in English.\n"
             "3. Generate exactly 3 unique, search-optimized search query variations that will retrieve the best matching documents.\n"
             "Respond ONLY with a JSON array of strings containing the 3 queries. Example:\n"
             '[\"cow milk calcium deficiency feed\", \"cattle milk fever prevention supplements\", \"dairy cows feed fat quality increase\"]'
@@ -169,7 +169,7 @@ class QueryOptimizer:
         used_model = "Qwen/Qwen2.5-72B-Instruct"
 
         try:
-            with httpx.Client(timeout=12.0) as client:
+            with httpx.Client(timeout=8.0) as client:
                 # Attempt primary 72B model
                 response = client.post(self.model_url, json=payload, headers=headers)
                 
@@ -189,46 +189,12 @@ class QueryOptimizer:
                     raise RuntimeError(f"Hugging Face API returned error status {response.status_code}: {response.text}")
                     
         except Exception as e:
-            logger.error(f"Hugging Face API call failed: {e}.")
-            
-            use_local_llm = os.getenv("USE_LOCAL_LLM_FALLBACK", "false").lower() in ("true", "1", "yes")
-            local_err_str = "disabled"
-            
-            if use_local_llm:
-                logger.info("Attempting local Qwen fallback model (USE_LOCAL_LLM_FALLBACK=True)...")
-                logfire.warning("Hugging Face API error, attempting local Qwen fallback", error=str(e))
-                try:
-                    from src.app.services.local_llm import local_llm
-                    response_text = local_llm.generate(prompt)
-                    logger.info(f"Local Qwen generated response: {response_text}")
-                    used_model = "local:Qwen2.5-0.5B-Instruct"
-                    
-                    parsed_queries = self._extract_json_array(response_text)
-                    if not parsed_queries:
-                        parsed_queries = self._fallback_parse(response_text)
-                    
-                    if parsed_queries:
-                        if generation:
-                            generation.update(
-                                output=str(parsed_queries), 
-                                model=used_model, 
-                                status_message="HuggingFace API failed, successfully fell back to local Qwen model"
-                            )
-                            generation.end()
-                            if trace:
-                                trace.update(output=str(parsed_queries))
-                                trace.end()
-                        return parsed_queries
-                except Exception as local_err:
-                    local_err_str = str(local_err)
-                    logger.error(f"Local Qwen fallback failed: {local_err_str}")
-                    logfire.exception("Local Qwen fallback failed", error=local_err_str)
-            else:
-                logger.info("Local Qwen fallback is disabled.")
+            logger.error(f"Hugging Face API call failed: {e}. Trying fallback to OpenAI...")
+            logfire.warning("Hugging Face API error, attempting OpenAI fallback", error=str(e))
 
-            # Fallback to OpenAI gpt-4o-mini
-            logger.info("Attempting fallback to OpenAI gpt-4o-mini...")
+            # Try Fallback to OpenAI gpt-4o-mini
             openai_err_str = "no key"
+            used_model = "openai:gpt-4o-mini"
             if settings.OPENAI_API_KEY:
                 try:
                     headers = {
@@ -236,7 +202,7 @@ class QueryOptimizer:
                         "Content-Type": "application/json"
                     }
                     payload = {
-                        "model": "gpt-4.1-nano",
+                        "model": "gpt-4o-mini",
                         "messages": [
                             {"role": "system", "content": system_message},
                             {"role": "user", "content": user_message}
@@ -244,13 +210,12 @@ class QueryOptimizer:
                         "temperature": 0.1,
                         "max_tokens": 150
                     }
-                    with httpx.Client(timeout=10.0) as client:
+                    with httpx.Client(timeout=8.0) as client:
                         response = client.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers)
                         if response.status_code == 200:
                             result = response.json()
                             response_text = result["choices"][0]["message"]["content"]
                             logger.info(f"OpenAI gpt-4o-mini generated response: {response_text}")
-                            used_model = "openai:gpt-4o-mini"
                             
                             parsed_queries = self._extract_json_array(response_text)
                             if not parsed_queries:
@@ -261,7 +226,7 @@ class QueryOptimizer:
                                     generation.update(
                                         output=str(parsed_queries), 
                                         model=used_model, 
-                                        status_message="HuggingFace failed, fell back to OpenAI gpt-4o-mini"
+                                        status_message=f"HuggingFace failed ({e}), fell back to OpenAI"
                                     )
                                     generation.end()
                                     if trace:
@@ -275,13 +240,13 @@ class QueryOptimizer:
                     logger.error(f"OpenAI fallback failed: {openai_err_str}")
                     logfire.exception("OpenAI fallback failed", error=openai_err_str)
 
-            # Final fallback: return original query
+            # Final Fallback: Return original query
             parsed_queries = [current_query]
             if generation:
                 generation.update(
                     output=str(parsed_queries), 
                     level="ERROR", 
-                    status_message=f"HuggingFace failed ({e}), local Qwen fallback: {local_err_str}, OpenAI fallback: {openai_err_str}. Reverted to original query."
+                    status_message=f"Hugging Face failed ({e}), OpenAI fallback failed ({openai_err_str}). Reverted to original query."
                 )
                 generation.end()
                 if trace:
@@ -324,3 +289,4 @@ class QueryOptimizer:
 
 
 query_optimizer = QueryOptimizer()
+

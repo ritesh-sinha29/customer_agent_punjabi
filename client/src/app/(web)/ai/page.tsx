@@ -57,11 +57,18 @@ interface ChatMessage {
   timestamp: string;
 }
 
-const SUGGESTIONS = [
+const SUGGESTIONS_EN = [
   "How can I prevent milk fever (calcium deficiency) in cows or buffaloes?",
   "Which fodder is best for my dairy cattle's nutrition?",
   "How can I increase the milk quality and fat content?",
   "How do I protect my cattle from mastitis?",
+];
+
+const SUGGESTIONS_PAN = [
+  "ਗਾਂ ਜਾਂ ਮੱਝ ਵਿੱਚ ਮਿਲਕ ਫੀਵਰ (ਕੈਲਸ਼ੀਅਮ ਦੀ ਕਮੀ) ਤੋਂ ਕਿਵੇਂ ਬਚਾਅ ਕਰੀਏ?",
+  "ਮੇਰੇ ਦੁੱਧ ਵਾਲੇ ਪਸ਼ੂਆਂ ਲਈ ਸਭ ਤੋਂ ਵਧੀਆ ਹਰਾ ਚਾਰਾ ਕਿਹੜਾ ਹੈ?",
+  "ਦੁੱਧ ਦੀ ਗੁਣਵੱਤਾ ਅਤੇ ਫੈਟ ਪ੍ਰਤੀਸ਼ਤ ਕਿਵੇਂ ਵਧਾਇਆ ਜਾ ਸਕਦਾ ਹੈ?",
+  "ਆਪਣੇ ਪਸ਼ੂਆਂ ਨੂੰ ਥਣਾਂ ਦੀ ਸੋਜ (ਮਾਸਟਾਈਟਿਸ) ਤੋਂ ਕਿਵੇਂ ਬਚਾਈਏ?",
 ];
 
 const SUGGESTION_ICONS = [
@@ -82,8 +89,20 @@ export default function AiPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [lang, setLang] = useState<"en" | "pan">("pan");
 
-  const typedPlaceholder = useTypewriter(SUGGESTIONS, 30, 15, 2000);
+  const suggestions = lang === "en" ? SUGGESTIONS_EN : SUGGESTIONS_PAN;
+  const typedPlaceholder = useTypewriter(suggestions, 30, 15, 2000);
+
+  const subheading =
+    lang === "en"
+      ? "Trusted companion of dairy farmers across Punjab — high-quality animal nutrition and scientifically formulated balanced feed."
+      : "ਪੰਜਾਬ ਦੇ ਡੇਅਰੀ ਕਿਸਾਨਾਂ ਦਾ ਭਰੋਸੇਮੰਦ ਸਾਥੀ — ਉੱਚ ਗੁਣਵੱਤਾ ਵਾਲਾ ਪਸ਼ੂ ਪੋਸ਼ਣ ਅਤੇ ਵਿਗਿਆਨਕ ਢੰਗ ਨਾਲ ਤਿਆਰ ਕੀਤਾ ਸੰਤੁਲਿਤ ਪਸ਼ੂ ਆਹਾਰ।";
+
+  const bottomDisclaimer =
+    lang === "en"
+      ? "This AI advisor is for informational purposes only. Please also consult a veterinarian."
+      : "ਕਿਰਪਾ ਕਰਕੇ ਸਹੀ ਇਲਾਜ ਅਤੇ ਸਲਾਹ ਲਈ ਆਪਣੇ ਨਜ਼ਦੀਕੀ ਪਸ਼ੂ ਡਾਕਟਰ ਨਾਲ ਵੀ ਜ਼ਰੂਰ ਸੰਪਰਕ ਕਰੋ।";
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -105,7 +124,10 @@ export default function AiPage() {
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `I received your query: "${userMessage.content}". How else can I help you with your cattle today?`,
+        content:
+          lang === "en"
+            ? `I received your query: "${userMessage.content}". How else can I help you with your cattle today?`
+            : `ਮੈਨੂੰ ਤੁਹਾਡਾ ਸਵਾਲ ਮਿਲ ਗਿਆ ਹੈ: "${userMessage.content}"। ਮੈਂ ਅੱਜ ਤੁਹਾਡੀ ਪਸ਼ੂਆਂ ਦੀ ਦੇਖਭਾਲ ਵਿੱਚ ਹੋਰ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?`,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -148,84 +170,112 @@ export default function AiPage() {
       <header className="flex h-10 shrink-0 items-center justify-between px-6 pt-2 bg-transparent z-20 w-full">
         <SidebarTrigger className="-ml-1 text-[#2E3A2F] hover:bg-[#2E3A2F]/5" />
 
-        {/* User Auth Section */}
-        <div className="flex items-center gap-3">
-          {session ? (
-            <div className="relative">
-              <button
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-2 hover:bg-zinc-50 px-2 py-1.5 rounded-full transition-all border border-zinc-100 cursor-pointer"
-              >
-                <Avatar className="h-7 w-7 border border-zinc-200 shadow-2xs select-none">
-                  <AvatarImage
-                    src={session.user.image || undefined}
-                    alt={session.user.name}
-                  />
-                  <AvatarFallback className="bg-[#2E3A2F]/10 text-[#2E3A2F] font-bold text-xs">
-                    {session.user.name
-                      ? session.user.name[0].toUpperCase()
-                      : "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-xs font-semibold text-[#2E3A2F] hidden sm:inline select-none">
-                  {session.user.name}
-                </span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${
-                    isDropdownOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+        <div className="flex items-center gap-4">
+          {/* Language Toggle */}
+          <div className="flex items-center bg-zinc-100/80 rounded-full p-0.5 border border-zinc-200/50 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                lang === "en"
+                  ? "bg-white text-[#2E3A2F] shadow-2xs"
+                  : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              Eng
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang("pan")}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                lang === "pan"
+                  ? "bg-white text-[#2E3A2F] shadow-2xs"
+                  : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              PAN
+            </button>
+          </div>
 
-              {isDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40 bg-transparent"
-                    onClick={() => setIsDropdownOpen(false)}
+          {/* User Auth Section */}
+          <div className="flex items-center gap-3">
+            {session ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center gap-2 hover:bg-zinc-50 px-2 py-1.5 rounded-full transition-all border border-zinc-100 cursor-pointer"
+                >
+                  <Avatar className="h-7 w-7 border border-zinc-200 shadow-2xs select-none">
+                    <AvatarImage
+                      src={session.user.image || undefined}
+                      alt={session.user.name}
+                    />
+                    <AvatarFallback className="bg-[#2E3A2F]/10 text-[#2E3A2F] font-bold text-xs">
+                      {session.user.name
+                        ? session.user.name[0].toUpperCase()
+                        : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs font-semibold text-[#2E3A2F] hidden sm:inline select-none">
+                    {session.user.name}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${
+                      isDropdownOpen ? "rotate-180" : ""
+                    }`}
                   />
-                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-zinc-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 origin-top-right">
-                    <button
-                      onClick={async () => {
-                        try {
-                          await signOut({
-                            fetchOptions: {
-                              onSuccess: () => {
-                                window.location.reload();
+                </button>
+
+                {isDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40 bg-transparent"
+                      onClick={() => setIsDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-zinc-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 origin-top-right">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await signOut({
+                              fetchOptions: {
+                                onSuccess: () => {
+                                  window.location.reload();
+                                },
                               },
-                            },
-                          });
-                        } catch (err) {
-                          console.error(err);
-                        }
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <Avatar
-                className="h-8 w-8 border border-zinc-200 bg-zinc-100 flex items-center justify-center cursor-pointer hover:bg-zinc-200 transition-colors"
-                onClick={handleGoogleSignIn}
-              >
-                <User className="w-4 h-4 text-zinc-500" />
-              </Avatar>
-              <Button
-                onClick={handleGoogleSignIn}
-                disabled={isRegistering}
-                className="bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] rounded-full px-4 h-8 text-xs font-medium transition-all flex items-center gap-2"
-              >
-                {isRegistering && (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            });
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  </>
                 )}
-                Register
-              </Button>
-            </div>
-          )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Avatar
+                  className="h-8 w-8 border border-zinc-200 bg-zinc-100 flex items-center justify-center cursor-pointer hover:bg-zinc-200 transition-colors"
+                  onClick={handleGoogleSignIn}
+                >
+                  <User className="w-4 h-4 text-zinc-500" />
+                </Avatar>
+                <Button
+                  onClick={handleGoogleSignIn}
+                  disabled={isRegistering}
+                  className="bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] rounded-full px-4 h-8 text-xs font-medium transition-all flex items-center gap-2"
+                >
+                  {isRegistering && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  Register
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -249,7 +299,7 @@ export default function AiPage() {
                       Advisor
                     </EmptyTitle>
                     <EmptyDescription className="text-emerald-900 text-base max-w-3xl mx-auto mt-2 text-center leading-relaxed">
-                      Trusted companion of dairy farmers across Punjab — high-quality animal nutrition and scientifically formulated balanced feed.
+                      {subheading}
                     </EmptyDescription>
 
                     {/* Leaf Separator */}
@@ -262,7 +312,7 @@ export default function AiPage() {
 
                   <div className="w-full max-w-4xl mt-8 z-10">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-                      {SUGGESTIONS.map((suggestion, index) => (
+                      {suggestions.map((suggestion, index) => (
                         <button
                           key={suggestion}
                           type="button"
@@ -392,7 +442,7 @@ export default function AiPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={typedPlaceholder || "Type your question or choose from suggestions..."}
+              placeholder={typedPlaceholder || (lang === "en" ? "Type your question or choose from suggestions..." : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ...")}
               className="w-full bg-transparent border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none resize-none py-2 px-2 min-h-[44px] max-h-32 text-sm text-zinc-800 disabled:opacity-50"
               disabled={isTyping}
             />
@@ -461,7 +511,7 @@ export default function AiPage() {
               />
             </svg>
             <span>
-              This AI advisor is for informational purposes only. Please also consult a veterinarian.
+              {bottomDisclaimer}
             </span>
           </div>
         </div>
