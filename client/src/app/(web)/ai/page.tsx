@@ -354,7 +354,7 @@ export default function AiPage() {
                   </div>
                 </Empty>
               ) : (
-                <MessageScrollerContent className="max-w-3xl mx-auto w-full gap-6 pb-6">
+                <MessageScrollerContent className="max-w-3xl mx-auto w-full gap-6 pt-10 pb-6">
                   {messages.map((msg) => (
                     <MessageScrollerItem key={msg.id}>
                       <Message align={msg.role === "user" ? "end" : "start"}>
@@ -434,7 +434,7 @@ export default function AiPage() {
                               </BubbleContent>
                             </Bubble>
                           )}
-                          <MessageFooter className="flex items-center gap-3 w-full mt-1 min-h-[24px]">
+                          <MessageFooter className="flex items-center gap-3 w-full mt-0.5 min-h-[24px]">
                             <div className="flex items-center gap-2 text-neutral-700 text-xs font-medium">
                               <span>{msg.timestamp}</span>
                               {msg.duration !== undefined && (
