@@ -48,6 +48,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { signIn, signOut, useSession } from "@/lib/auth-client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useTypewriter } from "@/hooks/use-typewriter";
 
 interface ChatMessage {
   id: string;
@@ -57,10 +58,10 @@ interface ChatMessage {
 }
 
 const SUGGESTIONS = [
-  "ਗਾਂ ਜਾਂ ਮੱਝ ਵਿੱਚ ਦੁੱਧ ਬੁਖਾਰ (ਕੈਲਸ਼ੀਅਮ ਦੀ ਕਮੀ) ਤੋਂ ਕਿਵੇਂ ਬਚਿਆ ਜਾਵੇ?",
-  "ਮੇਰੇ ਪਸ਼ੂ ਲਈ ਕਿਹੜਾ ਚਾਰਾ ਸਭ ਤੋਂ ਵਧੀਆ ਰਹੇਗਾ?",
-  "ਦੁੱਧ ਦੀ ਕੁਆਲਟੀ ਅਤੇ ਫੈਟ ਕਿਵੇਂ ਵਧਾਈਏ?",
-  "ਥਣੈਲਾ ਰੋਗ (ਮਾਸਟਾਈਟਿਸ) ਤੋਂ ਪਸ਼ੂਆਂ ਦਾ ਬਚਾਅ ਕਿਵੇਂ ਕਰੀਏ?",
+  "How can I prevent milk fever (calcium deficiency) in cows or buffaloes?",
+  "Which fodder is best for my dairy cattle's nutrition?",
+  "How can I increase the milk quality and fat content?",
+  "How do I protect my cattle from mastitis?",
 ];
 
 const SUGGESTION_ICONS = [
@@ -81,6 +82,43 @@ export default function AiPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const typedPlaceholder = useTypewriter(SUGGESTIONS, 30, 15, 2000);
+
+  const handleSend = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!input.trim() || isTyping) return;
+
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content: input.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsTyping(true);
+
+    // Mock answer response
+    setTimeout(() => {
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `I received your query: "${userMessage.content}". How else can I help you with your cattle today?`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     if (isRegistering) return;
@@ -211,8 +249,7 @@ export default function AiPage() {
                       Advisor
                     </EmptyTitle>
                     <EmptyDescription className="text-emerald-900 text-base max-w-3xl mx-auto mt-2 text-center leading-relaxed">
-                      ਪੰਜਾਬ ਭਰ ਦੇ ਪਸ਼ੂ ਪਾਲਕਾਂ ਦਾ ਭਰੋਸੇਯੋਗ ਸਾਥੀ — ਉੱਚ-ਗੁਣਵੱਤਾ ਪਸ਼ੂ ਪੋਸ਼ਣ ਅਤੇ
-                      ਵਿਗਿਆਨਕ ਤਰੀਕੇ ਨਾਲ ਤਿਆਰ ਕੀਤਾ ਸੰਤੁਲਿਤ ਚਾਰਾ।
+                      Trusted companion of dairy farmers across Punjab — high-quality animal nutrition and scientifically formulated balanced feed.
                     </EmptyDescription>
 
                     {/* Leaf Separator */}
@@ -229,7 +266,7 @@ export default function AiPage() {
                         <button
                           key={suggestion}
                           type="button"
-                          // onClick={() => handleSuggestionClick(suggestion)}
+                          onClick={() => setInput(suggestion)}
                           className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-200 bg-neutral-50 hover:bg-emerald-700/10 transition-all duration-200 shadow-2xs group cursor-pointer w-full text-left"
                         >
                           <div className="flex items-center gap-4 flex-1 pr-2">
@@ -348,14 +385,14 @@ export default function AiPage() {
       <div className="bg-transparent pb-4 px-4 md:px-6 shrink-0 w-full z-10">
         <div className="max-w-3xl mx-auto w-full">
           <form
-            // onSubmit={handleSend}
+            onSubmit={handleSend}
             className="relative flex flex-col rounded-2xl border border-[#2E3A2F]/20 bg-white p-3 shadow-md focus-within:border-[#2E3A2F] focus-within:ring-1 focus-within:ring-[#2E3A2F]/10 transition-all"
           >
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              // onKeyDown={handleKeyDown}
-              placeholder="ਆਪਣਾ ਸਵਾਲ ਟਾਈਪ ਕਰੋ ਜਾਂ ਸੁਝਾਅ ਵਿੱਚੋਂ ਚੁਣੋ..."
+              onKeyDown={handleKeyDown}
+              placeholder={typedPlaceholder || "Type your question or choose from suggestions..."}
               className="w-full bg-transparent border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none resize-none py-2 px-2 min-h-[44px] max-h-32 text-sm text-zinc-800 disabled:opacity-50"
               disabled={isTyping}
             />
@@ -392,7 +429,7 @@ export default function AiPage() {
                 disabled={!input.trim() || isTyping}
                 className="h-9 px-4 bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] transition-all rounded-full cursor-pointer disabled:opacity-40 shrink-0 flex items-center justify-center gap-1.5 text-xs font-semibold"
               >
-                <span>ਭੇਜੋ</span>
+                <span>Send</span>
                 <Send className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -424,8 +461,7 @@ export default function AiPage() {
               />
             </svg>
             <span>
-              ਇਹ AI ਸਲਾਹਕਾਰ ਸਿਰਫ਼ ਜਾਣਕਾਰੀ ਦੇਣ ਲਈ ਹੈ, ਕਿਰਪਾ ਕਰਕੇ ਵੈਟਰਨਰੀ ਡਾਕਟਰ ਦੀ ਸਲਾਹ
-              ਵੀ ਲਵੋ।
+              This AI advisor is for informational purposes only. Please also consult a veterinarian.
             </span>
           </div>
         </div>
