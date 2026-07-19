@@ -1,10 +1,13 @@
 import os
 import logging
+import json
+import asyncio
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from src.app.graphs.graph import agent_graph
-from langfuse.callback import CallbackHandler
+from langfuse.langchain import CallbackHandler
 
 logger = logging.getLogger("AgentChatApi")
 router = APIRouter(
@@ -110,3 +113,168 @@ async def chat_endpoint(req: ChatRequest):
     except Exception as e:
         logger.error(f"Agent Graph execution failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Agent Graph Error: {str(e)}")
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(req: ChatRequest):
+    config = {
+        "configurable": {
+            "thread_id": req.thread_id
+        }
+    }
+    
+    async def event_generator():
+        cb = get_langfuse_callback()
+        if cb:
+            config["callbacks"] = [cb]
+            
+        try:
+            # 1. Fetch current state of the conversation thread
+            state = await agent_graph.aget_state(config)
+            
+            # 2. Check if the graph is currently interrupted and waiting for HITL approval
+            if state.next:
+                if req.approve is None:
+                    yield f"data: {json.dumps({'type': 'error', 'error': 'Graph is waiting for approval. Please specify approve as True or False.'})}\n\n"
+                    return
+                    
+                if req.approve:
+                    # User approved: resume execution
+                    logger.info(f"User approved pending action for thread {req.thread_id}. Resuming...")
+                    async for event in agent_graph.astream_events(None, config, version="v2"):
+                        kind = event.get("event")
+                        if kind == "on_chat_model_stream":
+                            node_name = event.get("metadata", {}).get("langgraph_node")
+                            model_name = event.get("name")
+                            if node_name == "supervisor" and model_name == "supervisor_router":
+                                continue
+                            if node_name in ["supervisor", "rag_agent", "booking_agent", "query_agent"]:
+                                chunk = event["data"].get("chunk")
+                                if chunk and hasattr(chunk, "content"):
+                                    token = chunk.content
+                                    if token:
+                                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                        elif kind == "on_chat_model_end":
+                            node_name = event.get("metadata", {}).get("langgraph_node")
+                            model_name = event.get("name")
+                            if node_name == "supervisor" and model_name == "supervisor_router":
+                                output = event.get("data", {}).get("output")
+                                if output:
+                                    content = getattr(output, "content", "")
+                                    try:
+                                        parsed_data = json.loads(content)
+                                        reasoning = parsed_data.get("reasoning")
+                                        if reasoning:
+                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
+                                    except Exception:
+                                        parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
+                                        if parsed_obj and hasattr(parsed_obj, "reasoning"):
+                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': parsed_obj.reasoning})}\n\n"
+                else:
+                    # User rejected: clear the pending action to cancel database write and resume
+                    logger.info(f"User rejected pending action for thread {req.thread_id}. Cancelling and resuming...")
+                    await agent_graph.aupdate_state(config, {"pending_action_details": None})
+                    async for event in agent_graph.astream_events(None, config, version="v2"):
+                        kind = event.get("event")
+                        if kind == "on_chat_model_stream":
+                            node_name = event.get("metadata", {}).get("langgraph_node")
+                            model_name = event.get("name")
+                            if node_name == "supervisor" and model_name == "supervisor_router":
+                                continue
+                            if node_name in ["supervisor", "rag_agent", "booking_agent", "query_agent"]:
+                                chunk = event["data"].get("chunk")
+                                if chunk and hasattr(chunk, "content"):
+                                    token = chunk.content
+                                    if token:
+                                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                        elif kind == "on_chat_model_end":
+                            node_name = event.get("metadata", {}).get("langgraph_node")
+                            model_name = event.get("name")
+                            if node_name == "supervisor" and model_name == "supervisor_router":
+                                output = event.get("data", {}).get("output")
+                                if output:
+                                    content = getattr(output, "content", "")
+                                    try:
+                                        parsed_data = json.loads(content)
+                                        reasoning = parsed_data.get("reasoning")
+                                        if reasoning:
+                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
+                                    except Exception:
+                                        parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
+                                        if parsed_obj and hasattr(parsed_obj, "reasoning"):
+                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': parsed_obj.reasoning})}\n\n"
+            else:
+                # 3. Standard execution flow
+                if not req.message.strip():
+                    yield f"data: {json.dumps({'type': 'error', 'error': 'Message cannot be empty.'})}\n\n"
+                    return
+                    
+                initial_state = {
+                    "messages": [HumanMessage(content=req.message)],
+                    "user_id": req.user_id
+                }
+                
+                async for event in agent_graph.astream_events(initial_state, config, version="v2"):
+                    kind = event.get("event")
+                    if kind == "on_chat_model_stream":
+                        node_name = event.get("metadata", {}).get("langgraph_node")
+                        model_name = event.get("name")
+                        if node_name == "supervisor" and model_name == "supervisor_router":
+                            continue
+                        if node_name in ["supervisor", "rag_agent", "booking_agent", "query_agent"]:
+                            chunk = event["data"].get("chunk")
+                            if chunk and hasattr(chunk, "content"):
+                                token = chunk.content
+                                if token:
+                                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                    elif kind == "on_chat_model_end":
+                        node_name = event.get("metadata", {}).get("langgraph_node")
+                        model_name = event.get("name")
+                        if node_name == "supervisor" and model_name == "supervisor_router":
+                            output = event.get("data", {}).get("output")
+                            if output:
+                                content = getattr(output, "content", "")
+                                try:
+                                    parsed_data = json.loads(content)
+                                    reasoning = parsed_data.get("reasoning")
+                                    if reasoning:
+                                        yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
+                                except Exception:
+                                    parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
+                                    if parsed_obj and hasattr(parsed_obj, "reasoning"):
+                                        yield f"data: {json.dumps({'type': 'reasoning', 'content': parsed_obj.reasoning})}\n\n"
+            
+            # 4. Check if the graph has entered a new interrupt state (needs approval) or completed
+            new_state = await agent_graph.aget_state(config)
+            if new_state.next:
+                pending_action = new_state.next[0]
+                last_message = new_state.values["messages"][-1].content if new_state.values.get("messages") else ""
+                
+                payload = {
+                    "type": "pending_approval",
+                    "status": "pending_approval",
+                    "pending_action": "booking" if "booking" in pending_action else "query",
+                    "details": new_state.values.get("pending_action_details"),
+                    "response": last_message,
+                    "thread_id": req.thread_id
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+            else:
+                assistant_messages = [
+                    msg.content for msg in new_state.values.get("messages", [])
+                    if msg.type == "ai"
+                ]
+                reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
+                payload = {
+                    "type": "completed",
+                    "status": "completed",
+                    "response": reply,
+                    "thread_id": req.thread_id
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+                      
+        except Exception as e:
+            logger.error(f"Streaming endpoint error: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'error': f'Agent Graph Error: {str(e)}'})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

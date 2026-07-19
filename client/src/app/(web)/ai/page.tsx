@@ -49,12 +49,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { signIn, signOut, useSession } from "@/lib/auth-client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { useAgentSSE } from "@/hooks/use-agent-sse";
+import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
 
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  reasoning?: string;
 }
 
 const SUGGESTIONS_EN = [
@@ -84,12 +87,23 @@ const SUGGESTION_ICONS = [
 
 export default function AiPage() {
   const { data: session } = useSession();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
+
+  const [threadId] = useState(() => `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`);
+  const userId = session?.user?.id || "guest_user";
+
+  const {
+    messages,
+    isLoading,
+    pendingApproval,
+    sendMessage,
+    sendApproval,
+  } = useAgentSSE(threadId, userId);
+
+  const isTyping = isLoading;
 
   const suggestions = lang === "en" ? SUGGESTIONS_EN : SUGGESTIONS_PAN;
   const typedPlaceholder = useTypewriter(suggestions, 30, 15, 2000);
@@ -106,33 +120,10 @@ export default function AiPage() {
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isTyping) return;
+    if (!input.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    sendMessage(input.trim());
     setInput("");
-    setIsTyping(true);
-
-    // Mock answer response
-    setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content:
-          lang === "en"
-            ? `I received your query: "${userMessage.content}". How else can I help you with your cattle today?`
-            : `ਮੈਨੂੰ ਤੁਹਾਡਾ ਸਵਾਲ ਮਿਲ ਗਿਆ ਹੈ: "${userMessage.content}"। ਮੈਂ ਅੱਜ ਤੁਹਾਡੀ ਪਸ਼ੂਆਂ ਦੀ ਦੇਖਭਾਲ ਵਿੱਚ ਹੋਰ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      setIsTyping(false);
-    }, 1500);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -372,24 +363,95 @@ export default function AiPage() {
                           )}
                         </MessageAvatar>
                         <MessageContent>
-                          <Bubble
-                            variant={msg.role === "user" ? "default" : "muted"}
-                          >
-                            <BubbleContent
-                              className={
-                                msg.role === "user"
-                                  ? "!bg-[#2E3A2F] !text-white"
-                                  : ""
-                              }
+                          {msg.role === "assistant" && msg.reasoning && (
+                            <div className="mb-2 w-full max-w-full">
+                              {!msg.content ? (
+                                <div className="text-xs text-emerald-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-start gap-2 animate-pulse">
+                                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="font-bold block mb-0.5">Thinking...</span>
+                                    <span className="text-zinc-600 font-medium">{msg.reasoning}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <details className="text-xs text-zinc-500 bg-zinc-50/50 border border-zinc-100 rounded-lg overflow-hidden group w-fit max-w-[280px] sm:max-w-md">
+                                  <summary className="px-3 py-1.5 font-semibold text-[#5F7560] cursor-pointer hover:bg-zinc-100/50 transition-colors flex items-center gap-1.5 select-none list-none outline-none">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                                    Reasoning
+                                  </summary>
+                                  <div className="px-3 pb-2 pt-1 border-t border-zinc-100/50 text-zinc-500 leading-relaxed font-normal">
+                                    {msg.reasoning}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          )}
+                          {msg.content && (
+                            <Bubble
+                              variant={msg.role === "user" ? "default" : "muted"}
                             >
-                              {msg.content}
-                            </BubbleContent>
-                          </Bubble>
+                              <BubbleContent
+                                className={
+                                  msg.role === "user"
+                                    ? "!bg-[#2E3A2F] !text-white"
+                                    : ""
+                                }
+                              >
+                                {msg.role === "user" ? (
+                                  msg.content
+                                ) : (
+                                  <MarkdownFormatter content={msg.content} />
+                                )}
+                              </BubbleContent>
+                            </Bubble>
+                          )}
                           <MessageFooter>{msg.timestamp}</MessageFooter>
                         </MessageContent>
                       </Message>
                     </MessageScrollerItem>
                   ))}
+
+                  {pendingApproval && (
+                    <MessageScrollerItem>
+                      <div className="flex flex-col gap-3 p-4 bg-emerald-50/50 border border-emerald-200/60 rounded-2xl max-w-md mx-auto my-3 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
+                          <p className="text-xs font-bold text-emerald-800">
+                            {lang === "en" ? "Action Required" : "ਕਾਰਵਾਈ ਦੀ ਲੋੜ ਹੈ"}
+                          </p>
+                        </div>
+                        <div className="text-xs text-zinc-700 space-y-1 bg-white/60 p-2.5 rounded-lg border border-zinc-100">
+                          {pendingApproval.action === "booking" ? (
+                            <div>
+                              <strong>{lang === "en" ? "Product" : "ਉਤਪਾਦ"}:</strong> {pendingApproval.details?.product_name}<br />
+                              <strong>{lang === "en" ? "Quantity" : "ਮਾਤਰਾ"}:</strong> {pendingApproval.details?.quantity}
+                            </div>
+                          ) : (
+                            <div>
+                              <strong>{lang === "en" ? "Title" : "ਸਿਰਲੇਖ"}:</strong> {pendingApproval.details?.title}<br />
+                              <strong>{lang === "en" ? "Description" : "ਵੇਰਵਾ"}:</strong> {pendingApproval.details?.description}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => sendApproval(false)}
+                            className="px-3.5 py-1.5 border border-zinc-200 bg-white hover:bg-red-50 hover:text-red-600 text-zinc-600 rounded-full text-xs font-semibold cursor-pointer transition-all"
+                          >
+                            {lang === "en" ? "Cancel" : "ਰੱਦ ਕਰੋ"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => sendApproval(true)}
+                            className="px-3.5 py-1.5 bg-[#2E3A2F] hover:bg-[#3E4E3F] text-white rounded-full text-xs font-semibold cursor-pointer transition-all shadow-3xs"
+                          >
+                            {lang === "en" ? "Confirm & Proceed" : "ਪੁਸ਼ਟੀ ਕਰੋ ਅਤੇ ਅੱਗੇ ਵਧੋ"}
+                          </button>
+                        </div>
+                      </div>
+                    </MessageScrollerItem>
+                  )}
 
                   {isTyping && (
                     <MessageScrollerItem>
@@ -442,9 +504,15 @@ export default function AiPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={typedPlaceholder || (lang === "en" ? "Type your question or choose from suggestions..." : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ...")}
+              placeholder={
+                pendingApproval
+                  ? (lang === "en"
+                      ? "Please confirm or cancel the action above..."
+                      : "ਕਿਰਪਾ ਕਰਕੇ ਉੱਪਰ ਦਿੱਤੀ ਕਾਰਵਾਈ ਦੀ ਪੁਸ਼ਟੀ ਜਾਂ ਰੱਦ ਕਰੋ...")
+                  : (typedPlaceholder || (lang === "en" ? "Type your question or choose from suggestions..." : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ..."))
+              }
               className="w-full bg-transparent border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none resize-none py-2 px-2 min-h-[44px] max-h-32 text-sm text-zinc-800 disabled:opacity-50"
-              disabled={isTyping}
+              disabled={isLoading || !!pendingApproval}
             />
 
             {/* Actions row below */}
@@ -456,7 +524,7 @@ export default function AiPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
-                  disabled={isTyping}
+                  disabled={isLoading || !!pendingApproval}
                   title="Attach file (decorative)"
                 >
                   <Paperclip className="w-4 h-4" />
@@ -466,7 +534,7 @@ export default function AiPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
-                  disabled={isTyping}
+                  disabled={isLoading || !!pendingApproval}
                   title="Voice input (decorative)"
                 >
                   <Mic className="w-4 h-4" />
@@ -476,7 +544,7 @@ export default function AiPage() {
               {/* Right action */}
               <Button
                 type="submit"
-                disabled={!input.trim() || isTyping}
+                disabled={!input.trim() || isLoading || !!pendingApproval}
                 className="h-9 px-4 bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] transition-all rounded-full cursor-pointer disabled:opacity-40 shrink-0 flex items-center justify-center gap-1.5 text-xs font-semibold"
               >
                 <span>Send</span>
