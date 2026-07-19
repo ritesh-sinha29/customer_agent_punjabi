@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.app.api.endpoints.ingest import router as ingest_router
+from src.app.api.endpoints.agent_chat import router as agent_chat_router
 from src.app.services.llama_service import llama_service
 from src.app.services.pinecone_service import pinecone_service
 
@@ -40,6 +41,7 @@ async def health_check():
 
 # Include routing
 app.include_router(ingest_router, prefix="/api")
+app.include_router(agent_chat_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
