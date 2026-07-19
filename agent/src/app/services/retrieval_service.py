@@ -48,11 +48,13 @@ class RetrievalService:
         queries: List[str], 
         top_k: int = 5, 
         namespace: str = None,
-        user_id: str = "guest_user"
+        user_id: str = "guest_user",
+        original_query: str = None
     ) -> List[Dict[str, Any]]:
         """
         Takes multiple search queries, generates dense + sparse embeddings in batch,
-        queries Pinecone in parallel, de-duplicates chunks, and returns sorted results.
+        queries Pinecone in parallel, de-duplicates and rerank chunks (using Jina v2
+        Reranker or local RRF), and returns the top_k sorted results.
         """
         if not queries:
             return []
@@ -82,7 +84,8 @@ class RetrievalService:
             except Exception as le:
                 logger.error(f"Langfuse span creation failed in retrieval: {le}")
 
-        # 3. Query Pinecone in parallel
+        # 3. Query Pinecone in parallel with an expanded candidate pool size
+        candidate_top_k = max(top_k * 3, 15)
         tasks = []
         for i, query in enumerate(queries):
             dense_vec = dense_vectors[i] if i < len(dense_vectors) else None
@@ -93,7 +96,7 @@ class RetrievalService:
                     query=query,
                     dense_vec=dense_vec,
                     sparse_vec=sparse_vec,
-                    top_k=top_k,
+                    top_k=candidate_top_k,
                     namespace=namespace
                 )
             )
@@ -101,26 +104,17 @@ class RetrievalService:
         # Run all queries concurrently
         results_lists = await asyncio.gather(*tasks)
 
-        # 4. De-duplicate and combine results
-        unique_matches = {}
-        for matches in results_lists:
-            for match in matches:
-                match_id = match.get("id")
-                # We keep the match with the highest score if duplicates appear
-                if match_id not in unique_matches or match.get("score", 0) > unique_matches[match_id].get("score", 0):
-                    unique_matches[match_id] = match
-
-        # Sort combined unique matches by score descending
-        sorted_results = sorted(
-            unique_matches.values(),
-            key=lambda x: x.get("score", 0),
-            reverse=True
+        # 4. Rerank and filter using RerankingService
+        from src.app.services.reranking_service import reranking_service
+        primary_query = original_query if original_query else queries[0]
+        
+        final_results = await reranking_service.rerank(
+            query=primary_query,
+            results_lists=results_lists,
+            top_n=top_k
         )
 
-        # Limit to top K
-        final_results = sorted_results[:top_k]
-
-        logger.info(f"Retrieved and de-duplicated {len(final_results)} chunks from Pinecone.")
+        logger.info(f"Retrieved and reranked {len(final_results)} chunks from Pinecone.")
         logfire.info("Parallel retrieval complete", final_count=len(final_results))
 
         if span:
