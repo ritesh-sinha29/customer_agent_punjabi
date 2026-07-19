@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 import logfire
 from src.app.services.embedding_service import embedding_service
 from src.app.services.pinecone_service import pinecone_service
+from src.app.services.bm25_service import bm25_service
 from src.app.services.query_optimizer import langfuse
 
 logger = logging.getLogger("RetrievalService")
@@ -65,7 +66,7 @@ class RetrievalService:
         # 1. Batched generation of embeddings (dense and sparse)
         try:
             dense_vectors = await embedding_service.get_dense_embeddings(queries)
-            sparse_vectors = embedding_service.get_sparse_embeddings(queries)
+            sparse_vectors = bm25_service.get_query_sparse_vectors(queries)
         except Exception as e:
             logger.error(f"Failed embedding generation during retrieval: {e}")
             logfire.exception("Embedding generation error in retrieval", error=str(e))
@@ -113,6 +114,17 @@ class RetrievalService:
             results_lists=results_lists,
             top_n=top_k
         )
+
+        # Print retrieved chunks to console for user verification
+        print("\n" + "=" * 80)
+        print(f"BM25 HYBRID RETRIEVAL RESULTS (Original Query: '{primary_query}')")
+        print("=" * 80)
+        for idx, match in enumerate(final_results, 1):
+            score = match.get("score", 0.0)
+            text = match.get("metadata", {}).get("text", "")
+            snippet = text[:150].replace("\n", " ") + "..." if len(text) > 150 else text
+            print(f"[{idx}] [Score: {score:.4f}] {snippet}")
+        print("=" * 80 + "\n")
 
         logger.info(f"Retrieved and reranked {len(final_results)} chunks from Pinecone.")
         logfire.info("Parallel retrieval complete", final_count=len(final_results))
