@@ -33,6 +33,7 @@ export function useAgentSSE(threadId: string, userId: string) {
       setPendingApproval(null);
       const startTime = Date.now();
       let reasoningStartTime: number | null = null;
+      let toastFired = false;
 
       const assistantMessageId = Date.now().toString() + "-ai";
       let duration: number | undefined = undefined;
@@ -137,10 +138,27 @@ export function useAgentSSE(threadId: string, userId: string) {
                       : msg,
                   ),
                 );
+              } else if (data.type === "tool_success") {
+                if (!toastFired) {
+                  toast.success(
+                    data.tool === "create_booking"
+                      ? "Your products have been booked! You will get notified by our company soon."
+                      : "Your support request has been submitted successfully!",
+                    { duration: 5000 }
+                  );
+                  toastFired = true;
+                }
               } else if (data.type === "completed") {
                 if (!durationRecorded) {
                   duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
+                }
+                if (body?.approve === true && !toastFired) {
+                  toast.success(
+                    "Your products have been booked! You will get notified by our company soon.",
+                    { duration: 5000 }
+                  );
+                  toastFired = true;
                 }
                 setMessages((prev) =>
                   prev.map((msg) =>
@@ -153,6 +171,9 @@ export function useAgentSSE(threadId: string, userId: string) {
                 if (!durationRecorded) {
                   duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
+                }
+                if (body?.approve === true) {
+                  toast.error(`Failed to process action: ${data.error}`);
                 }
                 setMessages((prev) =>
                   prev.map((msg) =>
@@ -229,14 +250,7 @@ export function useAgentSSE(threadId: string, userId: string) {
           }
         : undefined;
 
-      if (approved) {
-        toast.success(
-          pendingApproval?.action === "booking"
-            ? "Your products have been booked! You will get notified by our company soon."
-            : "Your support request has been submitted successfully!",
-          { duration: 5000 }
-        );
-      } else {
+      if (!approved) {
         toast.info("Action cancelled.", { duration: 3000 });
       }
 

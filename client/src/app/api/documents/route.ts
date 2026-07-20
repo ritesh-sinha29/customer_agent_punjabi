@@ -9,17 +9,14 @@ export async function GET(_request: NextRequest) {
   try {
     // 1. Authenticate user session using Better Auth (with dev fallback)
     const activeHeaders = await headers();
-    const session = await auth.api.getSession({
+    await auth.api.getSession({
       headers: activeHeaders,
     });
-
-    const userId = session ? session.user.id : "admin-client-user";
 
     // 2. Fetch documents from database
     const userDocs = await db
       .select()
       .from(document)
-      .where(eq(document.userId, userId))
       .orderBy(desc(document.uploadedAt));
 
     return NextResponse.json({
@@ -45,11 +42,9 @@ export async function DELETE(request: NextRequest) {
   try {
     // 1. Authenticate user session using Better Auth
     const activeHeaders = await headers();
-    const session = await auth.api.getSession({
+    await auth.api.getSession({
       headers: activeHeaders,
     });
-
-    const userId = session ? session.user.id : "admin-client-user";
 
     // 2. Parse request body
     let body: { doc_id?: string };
@@ -68,7 +63,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 3. Fetch the document to ensure ownership
+    // 3. Fetch the document to ensure existence
     const [existingDoc] = await db
       .select()
       .from(document)
@@ -77,13 +72,6 @@ export async function DELETE(request: NextRequest) {
 
     if (!existingDoc) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
-    }
-
-    if (existingDoc.userId !== userId) {
-      return NextResponse.json(
-        { error: "Forbidden. You can only delete your own documents." },
-        { status: 403 },
-      );
     }
 
     // 4. Delete the document from PostgreSQL database

@@ -212,6 +212,10 @@ async def chat_stream_endpoint(req: ChatRequest):
                     if reasoning:
                         reasoning_sent = True
                         yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
+                elif node_name in ["booking_agent", "query_agent"]:
+                    yield f"data: {json.dumps({'type': 'tool_success', 'tool': 'create_booking' if node_name == 'booking_agent' else 'create_query'})}\n\n"
+            elif kind == "on_tool_end" and event.get("name") in ["create_booking", "create_query"]:
+                yield f"data: {json.dumps({'type': 'tool_success', 'tool': event.get('name')})}\n\n"
     
     async def event_generator():
         cb = get_langfuse_callback()

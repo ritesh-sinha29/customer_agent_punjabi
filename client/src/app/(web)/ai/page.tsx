@@ -101,12 +101,21 @@ function AiPageContent() {
   const [lang, setLang] = useState<"en" | "pan">("pan");
 
   const [threadId, setThreadId] = useState<string>(() => {
-    return urlThreadId || `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    return (
+      urlThreadId ||
+      `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+    );
   });
   const userId = session?.user?.id || "guest_user";
 
-  const { messages, setMessages, isLoading, pendingApproval, sendMessage, sendApproval } =
-    useAgentSSE(threadId, userId);
+  const {
+    messages,
+    setMessages,
+    isLoading,
+    pendingApproval,
+    sendMessage,
+    sendApproval,
+  } = useAgentSSE(threadId, userId);
 
   // Sync URL query parameter and threadId state
   useEffect(() => {
@@ -124,8 +133,11 @@ function AiPageContent() {
     let active = true;
     const fetchMessages = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-        const res = await fetch(`${backendUrl}/api/v1/agent/threads/${threadId}/messages`);
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(
+          `${backendUrl}/api/v1/agent/threads/${threadId}/messages`,
+        );
         if (!res.ok) throw new Error("Failed to fetch messages");
         const data = await res.json();
         if (data.success && active) {
@@ -446,7 +458,8 @@ function AiPageContent() {
                                         <ChevronDown className="w-4 h-4 text-emerald-600 transition-transform duration-200 group-open:rotate-180" />
                                       </summary>
                                       <div className="mt-2 text-zinc-700 font-medium whitespace-pre-wrap leading-relaxed select-text">
-                                        {msg.reasoning || "Analyzing query & consulting knowledge base..."}
+                                        {msg.reasoning ||
+                                          "Analyzing query & consulting knowledge base..."}
                                       </div>
                                     </details>
                                   </div>
@@ -454,36 +467,38 @@ function AiPageContent() {
                             </>
                           )}
                           {msg.approvalCard && (
-                            <div className="mb-2.5 w-full max-w-md mx-auto">
-                              <div
-                                className={`flex flex-col gap-1.5 p-3.5 rounded-2xl text-xs border shadow-2xs transition-all ${
-                                  msg.approvalCard.status === "approved"
-                                    ? "bg-emerald-50/90 border-emerald-200/80 text-emerald-900"
-                                    : "bg-zinc-50 border-zinc-200 text-zinc-600"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 font-bold text-xs">
-                                  {msg.approvalCard.status === "approved" ? (
-                                    <>
-                                      <span className="h-2 w-2 rounded-full bg-emerald-600" />
-                                      <span>
-                                        {msg.approvalCard.action === "booking"
-                                          ? "✓ Booking Confirmed"
-                                          : "✓ Support Request Submitted"}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span className="h-2 w-2 rounded-full bg-zinc-400" />
-                                      <span>
-                                        {msg.approvalCard.action === "booking"
-                                          ? "✕ Booking Cancelled"
-                                          : "✕ Support Request Cancelled"}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                                <div className="text-[11px] opacity-90 space-y-0.5 mt-0.5 bg-white/50 p-2 rounded-lg border border-black/5">
+                            <div className="mb-2.5 w-full ">
+                              <details className="group rounded-xl bg-neutral-100/90 border border-neutral-200/80 p-3 text-xs text-neutral-800 transition-all select-none shadow-2xs">
+                                <summary className="cursor-pointer flex items-center justify-between list-none font-medium outline-none [&::-webkit-details-marker]:hidden">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`h-2 w-2 rounded-full ${
+                                        msg.approvalCard.status === "approved"
+                                          ? "bg-emerald-600"
+                                          : "bg-zinc-400"
+                                      }`}
+                                    />
+                                    <span className="font-semibold text-neutral-900 text-xs">
+                                      {msg.approvalCard.status === "approved"
+                                        ? msg.approvalCard.action === "booking"
+                                          ? lang === "en"
+                                            ? "Booking Confirmed for VRSA Agrotech Products"
+                                            : "VRSA Agrotech ਉਤਪਾਦਾਂ ਦੀ ਪੁਸ਼ਟੀ ਹੋ ਗਈ ਹੈ"
+                                          : lang === "en"
+                                            ? "Support Request Submitted"
+                                            : "ਸਹਾਇਤਾ ਬੇਨਤੀ ਦਰਜ ਕੀਤੀ ਗਈ ਹੈ"
+                                        : msg.approvalCard.action === "booking"
+                                          ? lang === "en"
+                                            ? "Booking Request Cancelled"
+                                            : "ਬੁਕਿੰਗ ਬੇਨਤੀ ਰੱਦ ਕੀਤੀ ਗਈ ਹੈ"
+                                          : lang === "en"
+                                            ? "Support Request Cancelled"
+                                            : "ਸਹਾਇਤਾ ਬੇਨਤੀ ਰੱਦ ਕੀਤੀ ਗਈ ਹੈ"}
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="w-4 h-4 text-neutral-500 transition-transform duration-200 group-open:rotate-180 shrink-0" />
+                                </summary>
+                                <div className="mt-2.5 pt-2.5 border-t border-neutral-200/80 text-[11px] text-neutral-700 space-y-1 bg-white/70 p-2.5 rounded-lg border border-neutral-200/40 select-text">
                                   <div>
                                     <strong>
                                       {lang === "en" ? "Product" : "ਉਤਪਾਦ"}:
@@ -497,7 +512,7 @@ function AiPageContent() {
                                     {msg.approvalCard.details?.quantity}
                                   </div>
                                 </div>
-                              </div>
+                              </details>
                             </div>
                           )}
                           {msg.content && (
