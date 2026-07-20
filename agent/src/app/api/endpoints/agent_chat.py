@@ -192,6 +192,7 @@ async def chat_stream_endpoint(req: ChatRequest):
     }
     
     async def process_stream_events(stream_iterator):
+        reasoning_sent = False
         async for event in stream_iterator:
             kind = event.get("event")
             node_name = event.get("metadata", {}).get("langgraph_node", "")
@@ -204,11 +205,12 @@ async def chat_stream_endpoint(req: ChatRequest):
                     token = chunk.content
                     if token and isinstance(token, str):
                         yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-            elif kind == "on_chat_model_end":
-                if node_name == "supervisor_router":
+            elif kind in ["on_chat_model_end", "on_chain_end"]:
+                if node_name == "supervisor_router" and not reasoning_sent:
                     output = event.get("data", {}).get("output")
                     reasoning = extract_reasoning(output)
                     if reasoning:
+                        reasoning_sent = True
                         yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
     
     async def event_generator():
@@ -248,7 +250,10 @@ async def chat_stream_endpoint(req: ChatRequest):
                 save_user_message(req.thread_id, req.user_id, req.message)
                 initial_state = {
                     "messages": [HumanMessage(content=req.message)],
-                    "user_id": req.user_id
+                    "user_id": req.user_id,
+                    "internal_facts": [],
+                    "action_type": None,
+                    "pending_action_details": None
                 }
                 
                 async for chunk in process_stream_events(agent_graph.astream_events(initial_state, config, version="v2")):

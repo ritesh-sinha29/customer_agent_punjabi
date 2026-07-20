@@ -425,28 +425,28 @@ function AiPageContent() {
                           )}
                         </MessageAvatar>
                         <MessageContent>
-                          {msg.role === "assistant" && msg.reasoning && (
+                          {msg.role === "assistant" && (
                             <>
-                              {/* Case 1: Thinking phase (executing and no content yet) */}
+                              {/* Thinking phase (ONLY visible while executing and before response content arrives) */}
                               {isLoading &&
                                 msg.id === messages[messages.length - 1]?.id &&
                                 !msg.content && (
                                   <div className="mb-2 w-full max-w-full">
                                     <details
                                       open
-                                      className="group text-xs text-emerald-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 select-none"
+                                      className="group text-xs text-emerald-800 bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 select-none transition-all shadow-2xs"
                                     >
                                       <summary className="cursor-pointer flex items-center justify-between list-none outline-none [&::-webkit-details-marker]:hidden">
                                         <div className="flex items-center gap-2">
                                           <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
-                                          <span className="font-bold">
+                                          <span className="font-bold text-emerald-900">
                                             Thinking...
                                           </span>
                                         </div>
-                                        <ChevronDown className="w-4 h-4 text-zinc-500 transition-transform duration-200 group-open:rotate-180" />
+                                        <ChevronDown className="w-4 h-4 text-emerald-600 transition-transform duration-200 group-open:rotate-180" />
                                       </summary>
-                                      <div className="mt-2 text-zinc-600 font-medium whitespace-pre-wrap leading-relaxed select-text">
-                                        {msg.reasoning}
+                                      <div className="mt-2 text-zinc-700 font-medium whitespace-pre-wrap leading-relaxed select-text">
+                                        {msg.reasoning || "Analyzing query & consulting knowledge base..."}
                                       </div>
                                     </details>
                                   </div>

@@ -15,8 +15,7 @@ from src.app.graphs.state import SupervisorState
 
 logger = logging.getLogger("SupervisorAgent")
 
-# Initialize OpenAI LLM for Supervisor Sales Agent
-llm = ChatOpenAI(model=os.getenv("SUPERVISOR_MODEL", "gpt-4o-mini"), temperature=0.3, api_key=settings.OPENAI_API_KEY)
+llm = ChatOpenAI(model=os.getenv("SUPERVISOR_MODEL", "gpt-5.1"), temperature=0.3, api_key=settings.OPENAI_API_KEY)
 
 
 # -----------------------------------------------------------------------------
@@ -46,16 +45,12 @@ Analyze the user's message:
 3. Check order history/status -> action_type = "GET_BOOKINGS" (calls booking_agent -> get_booking_updates)
 4. Create support query/callback ticket -> action_type = "BOOK_QUERY" (calls query_agent -> create_query)
 5. Check existing support queries -> action_type = "GET_QUERIES" (calls query_agent -> get_user_queries)
-6. General conversation or internal facts already present -> action_type = "NONE"
+6. General conversation -> action_type = "NONE"
 """
 
 async def supervisor_router(state: SupervisorState) -> Dict[str, Any]:
     """Decides if we route to RAG Sub-Agent, Booking Sub-Agent, Query Sub-Agent, or Supervisor Sales Agent."""
     messages = state.get("messages", [])
-    internal_facts = state.get("internal_facts", [])
-
-    if internal_facts:
-        return {"next": "supervisor_sales_agent", "action_type": "NONE"}
 
     try:
         structured_llm = llm.with_structured_output(SupervisorDecision)
