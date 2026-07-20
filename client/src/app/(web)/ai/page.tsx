@@ -453,6 +453,53 @@ function AiPageContent() {
                                 )}
                             </>
                           )}
+                          {msg.approvalCard && (
+                            <div className="mb-2.5 w-full max-w-md mx-auto">
+                              <div
+                                className={`flex flex-col gap-1.5 p-3.5 rounded-2xl text-xs border shadow-2xs transition-all ${
+                                  msg.approvalCard.status === "approved"
+                                    ? "bg-emerald-50/90 border-emerald-200/80 text-emerald-900"
+                                    : "bg-zinc-50 border-zinc-200 text-zinc-600"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 font-bold text-xs">
+                                  {msg.approvalCard.status === "approved" ? (
+                                    <>
+                                      <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                                      <span>
+                                        {msg.approvalCard.action === "booking"
+                                          ? "✓ Booking Confirmed"
+                                          : "✓ Support Request Submitted"}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="h-2 w-2 rounded-full bg-zinc-400" />
+                                      <span>
+                                        {msg.approvalCard.action === "booking"
+                                          ? "✕ Booking Cancelled"
+                                          : "✕ Support Request Cancelled"}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                                <div className="text-[11px] opacity-90 space-y-0.5 mt-0.5 bg-white/50 p-2 rounded-lg border border-black/5">
+                                  <div>
+                                    <strong>
+                                      {lang === "en" ? "Product" : "ਉਤਪਾਦ"}:
+                                    </strong>{" "}
+                                    {msg.approvalCard.details?.product_name}
+                                  </div>
+                                  <div>
+                                    <strong>
+                                      {lang === "en" ? "Quantity" : "ਮਾਤਰਾ"}:
+                                    </strong>{" "}
+                                    {msg.approvalCard.details?.quantity}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           {msg.content && (
                             <Bubble
                               variant={

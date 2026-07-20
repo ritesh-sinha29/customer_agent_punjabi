@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
 
 export interface Message {
   id: string;
@@ -7,12 +8,14 @@ export interface Message {
   timestamp: string;
   reasoning?: string;
   duration?: number;
+  approvalCard?: PendingApproval;
 }
 
 export interface PendingApproval {
   action: "booking" | "query";
   details: any;
   response: string;
+  status?: "pending" | "approved" | "rejected";
 }
 
 const BACKEND_URL =
@@ -218,6 +221,25 @@ export function useAgentSSE(threadId: string, userId: string) {
   const sendApproval = useCallback(
     (approved: boolean) => {
       const confirmText = approved ? "Yes, confirm." : "No, cancel.";
+      
+      const cardToPreserve: PendingApproval | undefined = pendingApproval
+        ? {
+            ...pendingApproval,
+            status: approved ? "approved" : "rejected",
+          }
+        : undefined;
+
+      if (approved) {
+        toast.success(
+          pendingApproval?.action === "booking"
+            ? "Your products have been booked! You will get notified by our company soon."
+            : "Your support request has been submitted successfully!",
+          { duration: 5000 }
+        );
+      } else {
+        toast.info("Action cancelled.", { duration: 3000 });
+      }
+
       const userMsg: Message = {
         id: Date.now().toString() + "-user",
         role: "user",
@@ -226,6 +248,7 @@ export function useAgentSSE(threadId: string, userId: string) {
           hour: "2-digit",
           minute: "2-digit",
         }),
+        approvalCard: cardToPreserve,
       };
 
       setMessages((prev) => [...prev, userMsg]);
@@ -236,7 +259,7 @@ export function useAgentSSE(threadId: string, userId: string) {
         approve: approved,
       });
     },
-    [threadId, userId, startStream],
+    [threadId, userId, startStream, pendingApproval],
   );
 
   return {
