@@ -8,14 +8,14 @@ logger = logging.getLogger("DbService")
 
 class DbService:
     """
-    Service to execute database queries directly against the Neon PostgreSQL instance.
-    Uses psycopg for high-performance direct SQL interaction.
+    Service to execute database queries directly against PostgreSQL instance.
+    Handles graceful fallback if database URL is missing or unreachable.
     """
 
     def __init__(self):
         self.db_url = settings.DATABASE_URL
         if not self.db_url:
-            logger.error("DATABASE_URL is not set in settings!")
+            logger.warning("DATABASE_URL is not set in settings!")
 
     def get_connection(self):
         """
@@ -29,20 +29,23 @@ class DbService:
         """
         Executes a SELECT query and returns the results as a list of dicts.
         """
+        if not self.db_url:
+            return []
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(query, params)
                     return cur.fetchall()
         except Exception as e:
-            logger.error(f"Error executing query '{query}' with params {params}: {e}")
-            raise e
+            logger.error(f"Error executing query '{query}': {e}")
+            return []
 
     def execute_insert(self, query: str, params: tuple = ()) -> dict | None:
         """
         Executes an INSERT, UPDATE, or DELETE query and commits the transaction.
-        If a RETURNING clause is present, returns the affected row as a dict.
         """
+        if not self.db_url:
+            return None
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
@@ -50,17 +53,20 @@ class DbService:
                     conn.commit()
                     try:
                         return cur.fetchone()
-                    except psycopg.ProgrammingError:
-                        # No returning clause / results
+                    except Exception:
                         return None
         except Exception as e:
-            logger.error(f"Error executing insert '{query}' with params {params}: {e}")
-            raise e
+            logger.error(f"Error executing insert '{query}': {e}")
+            return None
 
     def ensure_chat_tables(self):
         """
         Ensures that chat_thread and chat_message tables exist in the database.
         """
+        if not self.db_url:
+            logger.warning("Skipping table verification because DATABASE_URL is not set.")
+            return
+
         create_thread_table = """
         CREATE TABLE IF NOT EXISTS chat_thread (
             id TEXT PRIMARY KEY,
@@ -91,9 +97,7 @@ class DbService:
                     conn.commit()
             logger.info("Chat tables and indexes verified/created successfully.")
         except Exception as e:
-            logger.error(f"Error ensuring chat tables: {e}")
-            raise e
+            logger.warning(f"Could not connect to PostgreSQL database: {e}")
 
 
 db_service = DbService()
-

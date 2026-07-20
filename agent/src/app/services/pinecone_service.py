@@ -165,7 +165,7 @@ class PineconeService:
         dense_vector: List[float],
         sparse_vector: Dict[str, Any] = None,
         top_k: int = 5,
-        namespace: str = None
+        namespace: str = "default"
     ) -> List[Dict[str, Any]]:
         """
         Queries Pinecone index with dense and sparse vectors (hybrid search).
@@ -174,11 +174,12 @@ class PineconeService:
         if not self.index:
             raise RuntimeError("Pinecone index is not initialized.")
         
+        target_namespace = namespace if namespace is not None else "default"
         try:
             query_args = {
                 "top_k": top_k,
                 "include_metadata": True,
-                "namespace": namespace
+                "namespace": target_namespace
             }
             if dense_vector is not None:
                 query_args["vector"] = dense_vector

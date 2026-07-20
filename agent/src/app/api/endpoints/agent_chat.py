@@ -3,6 +3,7 @@ import logging
 import json
 import asyncio
 import uuid
+from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -56,6 +57,32 @@ class ChatRequest(BaseModel):
     thread_id: str
     user_id: str
     approve: bool = None  # None: regular chat; True/False: HITL approval
+
+def extract_reasoning(output: Any) -> str:
+    if not output:
+        return ""
+    if hasattr(output, "reasoning") and getattr(output, "reasoning", None):
+        return str(output.reasoning)
+    if isinstance(output, dict) and output.get("reasoning"):
+        return str(output["reasoning"])
+    
+    content = getattr(output, "content", "")
+    if isinstance(content, str) and content.strip():
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, dict) and parsed.get("reasoning"):
+                return str(parsed["reasoning"])
+        except Exception:
+            pass
+            
+    parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
+    if parsed_obj:
+        if hasattr(parsed_obj, "reasoning") and getattr(parsed_obj, "reasoning", None):
+            return str(parsed_obj.reasoning)
+        if isinstance(parsed_obj, dict) and parsed_obj.get("reasoning"):
+            return str(parsed_obj["reasoning"])
+        
+    return ""
 
 def get_langfuse_callback():
     """
@@ -164,6 +191,26 @@ async def chat_stream_endpoint(req: ChatRequest):
         }
     }
     
+    async def process_stream_events(stream_iterator):
+        async for event in stream_iterator:
+            kind = event.get("event")
+            node_name = event.get("metadata", {}).get("langgraph_node", "")
+            
+            if kind == "on_chat_model_stream":
+                if node_name == "supervisor_router":
+                    continue
+                chunk = event.get("data", {}).get("chunk")
+                if chunk and hasattr(chunk, "content"):
+                    token = chunk.content
+                    if token and isinstance(token, str):
+                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+            elif kind == "on_chat_model_end":
+                if node_name == "supervisor_router":
+                    output = event.get("data", {}).get("output")
+                    reasoning = extract_reasoning(output)
+                    if reasoning:
+                        yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
+    
     async def event_generator():
         cb = get_langfuse_callback()
         if cb:
@@ -183,69 +230,15 @@ async def chat_stream_endpoint(req: ChatRequest):
                     # User approved: resume execution
                     logger.info(f"User approved pending action for thread {req.thread_id}. Resuming...")
                     save_user_message(req.thread_id, req.user_id, "Yes, confirm.")
-                    async for event in agent_graph.astream_events(None, config, version="v2"):
-                        kind = event.get("event")
-                        if kind == "on_chat_model_stream":
-                            node_name = event.get("metadata", {}).get("langgraph_node")
-                            model_name = event.get("name")
-                            if node_name == "supervisor" and model_name == "supervisor_router":
-                                continue
-                            if node_name in ["supervisor", "rag_agent", "booking_agent", "query_agent"]:
-                                chunk = event["data"].get("chunk")
-                                if chunk and hasattr(chunk, "content"):
-                                    token = chunk.content
-                                    if token:
-                                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                        elif kind == "on_chat_model_end":
-                            node_name = event.get("metadata", {}).get("langgraph_node")
-                            model_name = event.get("name")
-                            if node_name == "supervisor" and model_name == "supervisor_router":
-                                output = event.get("data", {}).get("output")
-                                if output:
-                                    content = getattr(output, "content", "")
-                                    try:
-                                        parsed_data = json.loads(content)
-                                        reasoning = parsed_data.get("reasoning")
-                                        if reasoning:
-                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
-                                    except Exception:
-                                        parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
-                                        if parsed_obj and hasattr(parsed_obj, "reasoning"):
-                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': parsed_obj.reasoning})}\n\n"
+                    async for chunk in process_stream_events(agent_graph.astream_events(None, config, version="v2")):
+                        yield chunk
                 else:
                     # User rejected: clear the pending action to cancel database write and resume
                     logger.info(f"User rejected pending action for thread {req.thread_id}. Cancelling and resuming...")
                     save_user_message(req.thread_id, req.user_id, "No, cancel.")
                     await agent_graph.aupdate_state(config, {"pending_action_details": None})
-                    async for event in agent_graph.astream_events(None, config, version="v2"):
-                        kind = event.get("event")
-                        if kind == "on_chat_model_stream":
-                            node_name = event.get("metadata", {}).get("langgraph_node")
-                            model_name = event.get("name")
-                            if node_name == "supervisor" and model_name == "supervisor_router":
-                                continue
-                            if node_name in ["supervisor", "rag_agent", "booking_agent", "query_agent"]:
-                                chunk = event["data"].get("chunk")
-                                if chunk and hasattr(chunk, "content"):
-                                    token = chunk.content
-                                    if token:
-                                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                        elif kind == "on_chat_model_end":
-                            node_name = event.get("metadata", {}).get("langgraph_node")
-                            model_name = event.get("name")
-                            if node_name == "supervisor" and model_name == "supervisor_router":
-                                output = event.get("data", {}).get("output")
-                                if output:
-                                    content = getattr(output, "content", "")
-                                    try:
-                                        parsed_data = json.loads(content)
-                                        reasoning = parsed_data.get("reasoning")
-                                        if reasoning:
-                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
-                                    except Exception:
-                                        parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
-                                        if parsed_obj and hasattr(parsed_obj, "reasoning"):
-                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': parsed_obj.reasoning})}\n\n"
+                    async for chunk in process_stream_events(agent_graph.astream_events(None, config, version="v2")):
+                        yield chunk
             else:
                 # 3. Standard execution flow
                 if not req.message.strip():
@@ -258,35 +251,8 @@ async def chat_stream_endpoint(req: ChatRequest):
                     "user_id": req.user_id
                 }
                 
-                async for event in agent_graph.astream_events(initial_state, config, version="v2"):
-                    kind = event.get("event")
-                    if kind == "on_chat_model_stream":
-                        node_name = event.get("metadata", {}).get("langgraph_node")
-                        model_name = event.get("name")
-                        if node_name == "supervisor" and model_name == "supervisor_router":
-                            continue
-                        if node_name in ["supervisor", "rag_agent", "booking_agent", "query_agent"]:
-                            chunk = event["data"].get("chunk")
-                            if chunk and hasattr(chunk, "content"):
-                                token = chunk.content
-                                if token:
-                                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                    elif kind == "on_chat_model_end":
-                        node_name = event.get("metadata", {}).get("langgraph_node")
-                        model_name = event.get("name")
-                        if node_name == "supervisor" and model_name == "supervisor_router":
-                            output = event.get("data", {}).get("output")
-                            if output:
-                                content = getattr(output, "content", "")
-                                try:
-                                    parsed_data = json.loads(content)
-                                    reasoning = parsed_data.get("reasoning")
-                                    if reasoning:
-                                        yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning})}\n\n"
-                                except Exception:
-                                    parsed_obj = getattr(output, "additional_kwargs", {}).get("parsed")
-                                    if parsed_obj and hasattr(parsed_obj, "reasoning"):
-                                        yield f"data: {json.dumps({'type': 'reasoning', 'content': parsed_obj.reasoning})}\n\n"
+                async for chunk in process_stream_events(agent_graph.astream_events(initial_state, config, version="v2")):
+                    yield chunk
             
             # 4. Check if the graph has entered a new interrupt state (needs approval) or completed
             new_state = await agent_graph.aget_state(config)

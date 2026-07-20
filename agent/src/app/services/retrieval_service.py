@@ -48,7 +48,7 @@ class RetrievalService:
         self, 
         queries: List[str], 
         top_k: int = 5, 
-        namespace: str = None,
+        namespace: str = "default",
         user_id: str = "guest_user",
         original_query: str = None
     ) -> List[Dict[str, Any]]:
