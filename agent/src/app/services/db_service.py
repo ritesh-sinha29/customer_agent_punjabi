@@ -57,5 +57,43 @@ class DbService:
             logger.error(f"Error executing insert '{query}' with params {params}: {e}")
             raise e
 
+    def ensure_chat_tables(self):
+        """
+        Ensures that chat_thread and chat_message tables exist in the database.
+        """
+        create_thread_table = """
+        CREATE TABLE IF NOT EXISTS chat_thread (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        create_message_table = """
+        CREATE TABLE IF NOT EXISTS chat_message (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL REFERENCES chat_thread(id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        create_thread_index = "CREATE INDEX IF NOT EXISTS idx_chat_thread_user_id ON chat_thread(user_id);"
+        create_message_index = "CREATE INDEX IF NOT EXISTS idx_chat_message_thread_id ON chat_message(thread_id);"
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(create_thread_table)
+                    cur.execute(create_message_table)
+                    cur.execute(create_thread_index)
+                    cur.execute(create_message_index)
+                    conn.commit()
+            logger.info("Chat tables and indexes verified/created successfully.")
+        except Exception as e:
+            logger.error(f"Error ensuring chat tables: {e}")
+            raise e
+
 
 db_service = DbService()
+

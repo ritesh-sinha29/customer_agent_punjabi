@@ -29,6 +29,7 @@ export function useAgentSSE(threadId: string, userId: string) {
       setIsLoading(true);
       setPendingApproval(null);
       const startTime = Date.now();
+      let reasoningStartTime: number | null = null;
 
       const assistantMessageId = Date.now().toString() + "-ai";
       let duration: number | undefined = undefined;
@@ -95,7 +96,7 @@ export function useAgentSSE(threadId: string, userId: string) {
               if (data.type === "token") {
                 accumulatedText += data.content;
                 if (!durationRecorded) {
-                  duration = (Date.now() - startTime) / 1000;
+                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 setMessages((prev) =>
@@ -106,6 +107,9 @@ export function useAgentSSE(threadId: string, userId: string) {
                   ),
                 );
               } else if (data.type === "reasoning") {
+                if (!reasoningStartTime) {
+                  reasoningStartTime = Date.now();
+                }
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -115,7 +119,7 @@ export function useAgentSSE(threadId: string, userId: string) {
                 );
               } else if (data.type === "pending_approval") {
                 if (!durationRecorded) {
-                  duration = (Date.now() - startTime) / 1000;
+                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 setPendingApproval({
@@ -132,7 +136,7 @@ export function useAgentSSE(threadId: string, userId: string) {
                 );
               } else if (data.type === "completed") {
                 if (!durationRecorded) {
-                  duration = (Date.now() - startTime) / 1000;
+                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 setMessages((prev) =>
@@ -144,7 +148,7 @@ export function useAgentSSE(threadId: string, userId: string) {
                 );
               } else if (data.type === "error") {
                 if (!durationRecorded) {
-                  duration = (Date.now() - startTime) / 1000;
+                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 setMessages((prev) =>
@@ -163,7 +167,7 @@ export function useAgentSSE(threadId: string, userId: string) {
       } catch (err: any) {
         console.error("Error in SSE Stream:", err);
         if (!durationRecorded) {
-          duration = (Date.now() - startTime) / 1000;
+          duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
           durationRecorded = true;
         }
         setMessages((prev) =>
@@ -179,6 +183,9 @@ export function useAgentSSE(threadId: string, userId: string) {
         );
       } finally {
         setIsLoading(false);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("threads-updated"));
+        }
       }
     },
     [threadId, userId],

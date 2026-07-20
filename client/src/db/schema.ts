@@ -126,4 +126,34 @@ export const booking = pgTable(
   (table) => [index("booking_userId_idx").on(table.userId)],
 );
 
+export const chatThread = pgTable(
+  "chat_thread",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    userId: text("user_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("chat_thread_userId_idx").on(table.userId)],
+);
+
+export const chatMessage = pgTable(
+  "chat_message",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => chatThread.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("chat_message_threadId_idx").on(table.threadId)],
+);
+
+
 

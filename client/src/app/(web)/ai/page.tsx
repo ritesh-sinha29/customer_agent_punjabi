@@ -20,7 +20,7 @@ import {
   Vegan,
 } from "lucide-react";
 import type * as React from "react";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -54,6 +54,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { useAgentSSE } from "@/hooks/use-agent-sse";
 import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
+import { useSearchParams, useRouter } from "next/navigation";
 
 interface ChatMessage {
   id: string;
@@ -88,20 +89,59 @@ const SUGGESTION_ICONS = [
   <Syringe className="w-5 h-5 text-[#2E3A2F]" />,
 ];
 
-export default function AiPage() {
+function AiPageContent() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const urlThreadId = searchParams.get("threadId");
+
   const [input, setInput] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
 
-  const [threadId] = useState(
-    () => `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-  );
+  const [threadId, setThreadId] = useState<string>(() => {
+    return urlThreadId || `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  });
   const userId = session?.user?.id || "guest_user";
 
-  const { messages, isLoading, pendingApproval, sendMessage, sendApproval } =
+  const { messages, setMessages, isLoading, pendingApproval, sendMessage, sendApproval } =
     useAgentSSE(threadId, userId);
+
+  // Sync URL query parameter and threadId state
+  useEffect(() => {
+    if (!urlThreadId && threadId) {
+      router.replace(`/ai?threadId=${threadId}`);
+    } else if (urlThreadId && urlThreadId !== threadId) {
+      setThreadId(urlThreadId);
+    }
+  }, [urlThreadId, threadId, router]);
+
+  // Load message history from DB when active thread changes
+  useEffect(() => {
+    if (!threadId) return;
+
+    let active = true;
+    const fetchMessages = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(`${backendUrl}/api/v1/agent/threads/${threadId}/messages`);
+        if (!res.ok) throw new Error("Failed to fetch messages");
+        const data = await res.json();
+        if (data.success && active) {
+          setMessages(data.messages);
+        }
+      } catch (err) {
+        console.error("Error fetching historical messages:", err);
+      }
+    };
+
+    fetchMessages();
+
+    return () => {
+      active = false;
+    };
+  }, [threadId, setMessages]);
 
   const isTyping = isLoading;
 
@@ -677,5 +717,13 @@ export default function AiPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AiPage() {
+  return (
+    <Suspense fallback={null}>
+      <AiPageContent />
+    </Suspense>
   );
 }
