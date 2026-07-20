@@ -1,10 +1,12 @@
 import uuid
 import logging
+from langchain_core.tools import tool
 from src.app.services.db_service import db_service
 
 logger = logging.getLogger("QueryTools")
 
 
+@tool
 def create_query(user_id: str, title: str, description: str) -> dict:
     """
     Creates a new support query/ticket in the database.
@@ -25,13 +27,16 @@ def create_query(user_id: str, title: str, description: str) -> dict:
     """
     try:
         record = db_service.execute_insert(sql, (query_id, title, description, user_id))
+        if not record:
+            raise ValueError("Database write returned empty record.")
         logger.info(f"Created query {query_id} for user {user_id}")
         return record
     except Exception as e:
         logger.error(f"Failed to create query for user {user_id}: {e}")
-        raise e
+        raise ValueError(f"Failed to create support query in database: {str(e)}")
 
 
+@tool
 def get_user_queries(user_id: str) -> list[dict]:
     """
     Retrieves all support queries/tickets created by a specific user.
@@ -54,4 +59,4 @@ def get_user_queries(user_id: str) -> list[dict]:
         return records
     except Exception as e:
         logger.error(f"Failed to get queries for user {user_id}: {e}")
-        raise e
+        raise ValueError(f"Failed to retrieve queries from database: {str(e)}")

@@ -4,18 +4,29 @@ import logging
 from typing import Dict, Any
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.graph import StateGraph, END
 
 from src.app.graphs.rag_agent import run_rag_agent
-from src.app.tools.booking_tools import create_booking, get_booking_updates, get_canonical_product_name
+from src.app.tools.booking_tools import create_booking, get_booking_updates
 from src.app.tools.query_tools import create_query, get_user_queries
 from src.app.core.config import settings
 from src.app.graphs.state import SupervisorState
 
 logger = logging.getLogger("SupervisorAgent")
 
-llm = ChatOpenAI(model=os.getenv("SUPERVISOR_MODEL", "gpt-5.1"), temperature=0.3, api_key=settings.OPENAI_API_KEY)
+# Retrieve supervisor model names
+model_name = os.getenv("SUPERVISOR_MODEL", "gpt-4.1-mini")
+sub_agent_model = "gpt-4.1-mini"
+
+# Supervisor main routing model (gpt-5.1)
+llm = ChatOpenAI(model=model_name, temperature=0.3, api_key=settings.OPENAI_API_KEY)
+# Sub-agent model (gpt-4.1-mini)
+sub_agent_llm = ChatOpenAI(model=sub_agent_model, temperature=0.2, api_key=settings.OPENAI_API_KEY)
+
+# Bind tools directly
+booking_llm = sub_agent_llm.bind_tools([create_booking, get_booking_updates])
+query_llm = sub_agent_llm.bind_tools([create_query, get_user_queries])
 
 
 # -----------------------------------------------------------------------------
@@ -23,15 +34,8 @@ llm = ChatOpenAI(model=os.getenv("SUPERVISOR_MODEL", "gpt-5.1"), temperature=0.3
 # -----------------------------------------------------------------------------
 class SupervisorDecision(BaseModel):
     action_type: str = Field(
-        description="Action to take: 'RAG_SEARCH' (call RAG sub-agent), 'BOOK_PRODUCT' (create order), 'GET_BOOKINGS' (check order status), 'BOOK_QUERY' (create support ticket), 'GET_QUERIES' (check user queries), or 'NONE' (direct sales pitch)."
+        description="Next node to route to: 'RAG_SEARCH' (for questions about catalog products, milk yield, fat %, ingredients, dosage), 'BOOKING_NODE' (for ordering/booking products or checking booking history/updates), 'QUERY_NODE' (for creating support tickets/callbacks or checking user support tickets), or 'NONE' (greetings, standard chit-chat, general topics)."
     )
-    product_name: str = Field(
-        default="",
-        description="Product name if ordering (e.g. 'MaxaPro-DS Dairy', 'Horsa-550X-Turbo', 'TrioSan Gold', 'Buffalo-Power 2X')."
-    )
-    quantity: int = Field(default=1, description="Quantity if ordering product.")
-    query_title: str = Field(default="", description="Title for support query/callback request.")
-    query_description: str = Field(default="", description="Detailed description for support query/callback.")
     reasoning: str = Field(description="Reasoning for decision.")
 
 
@@ -39,43 +43,34 @@ ROUTER_PROMPT = """
 You are the Supervisor Decision Engine for Vrsa Agrotech (Animal Nutrition & Dairy Supplements).
 Catalog: Horsa-550X-Turbo, TrioSan Gold, MaxaPro-DS Dairy, MaxaPro Liquid, Buffalo-Power 2X, Buffalo-F 1.5X.
 
-Analyze the user's message:
-1. Product questions, milk yield, fat %, ingredients, dosage -> action_type = "RAG_SEARCH" (calls rag_agent)
-2. Place product order -> action_type = "BOOK_PRODUCT" (calls booking_agent -> create_booking)
-3. Check order history/status -> action_type = "GET_BOOKINGS" (calls booking_agent -> get_booking_updates)
-4. Create support query/callback ticket -> action_type = "BOOK_QUERY" (calls query_agent -> create_query)
-5. Check existing support queries -> action_type = "GET_QUERIES" (calls query_agent -> get_user_queries)
-6. General conversation -> action_type = "NONE"
+Analyze the user's message and history to classify the next action:
+1. Product details/ingredients, dosage, animal species recommendation, milk fat yield -> action_type = "RAG_SEARCH" (routes to rag_agent)
+2. Place a product order/booking, check order/booking updates/history -> action_type = "BOOKING_NODE" (routes to booking_node)
+3. Create a support ticket/query/callback request, check existing support tickets -> action_type = "QUERY_NODE" (routes to query_node)
+4. Greetings, general chit-chat, or general sales discussion -> action_type = "NONE" (routes directly to sales agent)
 """
 
+
 async def supervisor_router(state: SupervisorState) -> Dict[str, Any]:
-    """Decides if we route to RAG Sub-Agent, Booking Sub-Agent, Query Sub-Agent, or Supervisor Sales Agent."""
+    """Decides if we route to RAG Sub-Agent, Booking Node, Query Node, or Supervisor Sales Agent."""
     messages = state.get("messages", [])
 
     try:
         structured_llm = llm.with_structured_output(SupervisorDecision)
         decision: SupervisorDecision = await structured_llm.ainvoke([SystemMessage(content=ROUTER_PROMPT)] + messages)
         
-        pending_details = {
-            "product_name": decision.product_name or "MaxaPro-DS Dairy",
-            "qty": decision.quantity,
-            "title": decision.query_title or "Official Callback Request",
-            "description": decision.query_description or (messages[-1].content if messages else "User Inquiry")
-        }
-
         if decision.action_type == "RAG_SEARCH":
             next_node = "rag_agent"
-        elif decision.action_type in ["BOOK_PRODUCT", "GET_BOOKINGS"]:
-            next_node = "booking_agent"
-        elif decision.action_type in ["BOOK_QUERY", "GET_QUERIES"]:
-            next_node = "query_agent"
+        elif decision.action_type == "BOOKING_NODE":
+            next_node = "booking_node"
+        elif decision.action_type == "QUERY_NODE":
+            next_node = "query_node"
         else:
             next_node = "supervisor_sales_agent"
 
         return {
             "next": next_node,
-            "action_type": decision.action_type,
-            "pending_action_details": pending_details
+            "action_type": decision.action_type
         }
     except Exception as e:
         logger.error(f"Router error: {e}")
@@ -83,66 +78,260 @@ async def supervisor_router(state: SupervisorState) -> Dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
-# 1. Booking Sub-Agent (Handles create_booking & get_booking_updates)
+# 1. Booking Agent Node (Invokes LLM with booking tools)
 # -----------------------------------------------------------------------------
-async def run_booking_agent(state: SupervisorState) -> Dict[str, Any]:
-    """Handles product order creation and order status checks in PostgreSQL."""
-    action = state.get("action_type", "BOOK_PRODUCT")
+async def booking_node(state: SupervisorState) -> Dict[str, Any]:
+    """Runs the LLM bound with booking tools to decide if it should call a tool or chat."""
+    messages = state.get("messages", [])
     user_id = state.get("user_id", "guest_user")
-    pending_details = state.get("pending_action_details", {}) or {}
-    facts = list(state.get("internal_facts") or [])
-
-    if action == "GET_BOOKINGS":
-        try:
-            records = get_booking_updates(user_id=user_id)
-            facts.append({"subagent": "booking_agent", "tool": "get_booking_updates", "status": "success", "user_bookings": records})
-        except Exception as e:
-            facts.append({"subagent": "booking_agent", "tool": "get_booking_updates", "status": "error", "error": str(e)})
-    else:
-        # BOOK_PRODUCT
-        raw_pname = pending_details.get("product_name", "MaxaPro-DS Dairy")
-        try:
-            pname = get_canonical_product_name(raw_pname)
-        except Exception:
-            pname = "MaxaPro-DS Dairy"
-        qty = int(pending_details.get("qty", 1))
+    
+    system_prompt = (
+        f"You are the Product Booking Assistant for Vrsa Agrotech.\n"
+        f"Your active user_id: {user_id}\n"
+        f"Always pass this user_id when calling any booking tool.\n"
+        f"Use create_booking to place product orders (you can pass 1 or multiple items in the items list), or get_booking_updates to check history.\n"
+        f"Do not ask the user for user_id, it is already provided above.\n"
+        f"If you need details like product name or quantity, ask the user directly before calling the tool."
+    )
+    
+    response = await booking_llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+    
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        tool_name = tool_call["name"]
         
-        try:
-            rec = create_booking(user_id=user_id, product_name=pname, qty=qty)
-            facts.append({"subagent": "booking_agent", "tool": "create_booking", "status": "success", "booking_id": rec.get("id"), "product": pname, "qty": qty})
-        except Exception as e:
-            facts.append({"subagent": "booking_agent", "tool": "create_booking", "status": "error", "error": str(e)})
+        if tool_name == "create_booking":
+            items = tool_call["args"].get("items", [])
+            # Fallback if model passes product_name and qty at top-level
+            if not items and "product_name" in tool_call["args"]:
+                items = [{"product_name": tool_call["args"]["product_name"], "qty": tool_call["args"].get("qty", 1)}]
+                
+            product_names = ", ".join([i.get("product_name", "") for i in items if i.get("product_name")])
+            quantities = ", ".join([f"{i.get('qty', 1)}x {i.get('product_name', '')}" for i in items if i.get("product_name")])
+            
+            pending_details = {
+                "product_name": product_names or "Product Order",
+                "quantity": quantities or "1",
+                "items": items,
+                "tool_call_id": tool_call["id"]
+            }
+            return {
+                "messages": [response],
+                "pending_action_details": pending_details,
+                "next": "booking_agent"
+            }
+        elif tool_name == "get_booking_updates":
+            return {
+                "messages": [response],
+                "next": "booking_read_agent"
+            }
+            
+    return {
+        "messages": [response],
+        "next": END
+    }
 
-    return {"internal_facts": facts, "next": "supervisor_sales_agent"}
 
-
-# -----------------------------------------------------------------------------
-# 2. Query Sub-Agent (Handles create_query & get_user_queries)
-# -----------------------------------------------------------------------------
-async def run_query_agent(state: SupervisorState) -> Dict[str, Any]:
-    """Handles support ticket creation and user query lookups in PostgreSQL."""
-    action = state.get("action_type", "BOOK_QUERY")
+async def run_booking_agent(state: SupervisorState) -> Dict[str, Any]:
+    """Executes create_booking tool call with HITL approval/rejection check."""
+    pending_details = state.get("pending_action_details")
+    messages = state.get("messages", [])
     user_id = state.get("user_id", "guest_user")
-    pending_details = state.get("pending_action_details", {}) or {}
-    facts = list(state.get("internal_facts") or [])
+    
+    last_msg = messages[-1]
+    tool_call_id = None
+    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+        tool_call_id = last_msg.tool_calls[0]["id"]
+    elif pending_details and "tool_call_id" in pending_details:
+        tool_call_id = pending_details["tool_call_id"]
+        
+    tool_call_id = tool_call_id or "unknown"
+    
+    if not pending_details:
+        # Cancelled by user
+        tool_msg = ToolMessage(
+            content="❌ Booking creation cancelled by user.",
+            tool_call_id=tool_call_id,
+            name="create_booking"
+        )
+        return {
+            "messages": [tool_msg],
+            "pending_action_details": None,
+            "next": "supervisor_sales_agent"
+        }
+        
+    items = pending_details.get("items", [])
+    
+    try:
+        result = create_booking.invoke({"user_id": user_id, "items": items})
+        tool_msg = ToolMessage(
+            content=str(result),
+            tool_call_id=tool_call_id,
+            name="create_booking"
+        )
+    except Exception as e:
+        tool_msg = ToolMessage(
+            content=f"❌ Failed to create booking: {str(e)}",
+            tool_call_id=tool_call_id,
+            name="create_booking"
+        )
+        
+    return {
+        "messages": [tool_msg],
+        "pending_action_details": None,
+        "next": "supervisor_sales_agent"
+    }
 
-    if action == "GET_QUERIES":
-        try:
-            records = get_user_queries(user_id=user_id)
-            facts.append({"subagent": "query_agent", "tool": "get_user_queries", "status": "success", "user_queries": records})
-        except Exception as e:
-            facts.append({"subagent": "query_agent", "tool": "get_user_queries", "status": "error", "error": str(e)})
-    else:
-        # BOOK_QUERY
-        title = pending_details.get("title", "Official Callback Request")
-        desc = pending_details.get("description", "User requested official support callback.")
-        try:
-            rec = create_query(user_id=user_id, title=title, description=desc)
-            facts.append({"subagent": "query_agent", "tool": "create_query", "status": "success", "ticket_id": rec.get("id"), "title": title})
-        except Exception as e:
-            facts.append({"subagent": "query_agent", "tool": "create_query", "status": "error", "error": str(e)})
 
-    return {"internal_facts": facts, "next": "supervisor_sales_agent"}
+async def run_booking_read_agent(state: SupervisorState) -> Dict[str, Any]:
+    """Executes get_booking_updates read tool call directly."""
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "guest_user")
+    
+    last_msg = messages[-1]
+    tool_call_id = last_msg.tool_calls[0]["id"] if hasattr(last_msg, "tool_calls") and last_msg.tool_calls else "unknown"
+    
+    try:
+        result = get_booking_updates(user_id=user_id)
+        tool_msg = ToolMessage(
+            content=str(result),
+            tool_call_id=tool_call_id,
+            name="get_booking_updates"
+        )
+    except Exception as e:
+        tool_msg = ToolMessage(
+            content=f"❌ Failed to retrieve bookings: {str(e)}",
+            tool_call_id=tool_call_id,
+            name="get_booking_updates"
+        )
+        
+    return {
+        "messages": [tool_msg],
+        "next": "supervisor_sales_agent"
+    }
+
+
+# -----------------------------------------------------------------------------
+# 2. Query Agent Node (Invokes LLM with query tools)
+# -----------------------------------------------------------------------------
+async def query_node(state: SupervisorState) -> Dict[str, Any]:
+    """Runs the LLM bound with query tools to decide if it should call a tool or chat."""
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "guest_user")
+    
+    system_prompt = (
+        f"You are the Support Query Assistant for Vrsa Agrotech.\n"
+        f"Your active user_id: {user_id}\n"
+        f"Always pass this user_id when calling any query tool.\n"
+        f"Use create_query to create support tickets, or get_user_queries to retrieve existing tickets.\n"
+        f"Do not ask the user for user_id, it is already provided above.\n"
+        f"If you need details like query title or description, ask the user directly before calling the tool."
+    )
+    
+    response = await query_llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+    
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        tool_name = tool_call["name"]
+        
+        if tool_name == "create_query":
+            pending_details = {
+                "title": tool_call["args"].get("title"),
+                "description": tool_call["args"].get("description"),
+                "tool_call_id": tool_call["id"]
+            }
+            return {
+                "messages": [response],
+                "pending_action_details": pending_details,
+                "next": "query_agent"
+            }
+        elif tool_name == "get_user_queries":
+            return {
+                "messages": [response],
+                "next": "query_read_agent"
+            }
+            
+    return {
+        "messages": [response],
+        "next": END
+    }
+
+
+async def run_query_agent(state: SupervisorState) -> Dict[str, Any]:
+    """Executes create_query tool call with HITL approval/rejection check."""
+    pending_details = state.get("pending_action_details")
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "guest_user")
+    
+    last_msg = messages[-1]
+    tool_call_id = None
+    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+        tool_call_id = last_msg.tool_calls[0]["id"]
+    elif pending_details and "tool_call_id" in pending_details:
+        tool_call_id = pending_details["tool_call_id"]
+        
+    if not pending_details:
+        tool_msg = ToolMessage(
+            content="❌ Support query creation cancelled by user.",
+            tool_call_id=tool_call_id or "unknown",
+            name="create_query"
+        )
+        return {
+            "messages": [tool_msg],
+            "pending_action_details": None,
+            "next": "supervisor_sales_agent"
+        }
+        
+    title = pending_details.get("title")
+    desc = pending_details.get("description")
+    
+    try:
+        result = create_query(user_id=user_id, title=title, description=desc)
+        tool_msg = ToolMessage(
+            content=str(result),
+            tool_call_id=tool_call_id or "unknown",
+            name="create_query"
+        )
+    except Exception as e:
+        tool_msg = ToolMessage(
+            content=f"❌ Failed to create support query: {str(e)}",
+            tool_call_id=tool_call_id or "unknown",
+            name="create_query"
+        )
+        
+    return {
+        "messages": [tool_msg],
+        "pending_action_details": None,
+        "next": "supervisor_sales_agent"
+    }
+
+
+async def run_query_read_agent(state: SupervisorState) -> Dict[str, Any]:
+    """Executes get_user_queries read tool call directly."""
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "guest_user")
+    
+    last_msg = messages[-1]
+    tool_call_id = last_msg.tool_calls[0]["id"] if hasattr(last_msg, "tool_calls") and last_msg.tool_calls else "unknown"
+    
+    try:
+        result = get_user_queries(user_id=user_id)
+        tool_msg = ToolMessage(
+            content=str(result),
+            tool_call_id=tool_call_id,
+            name="get_user_queries"
+        )
+    except Exception as e:
+        tool_msg = ToolMessage(
+            content=f"❌ Failed to retrieve support queries: {str(e)}",
+            tool_call_id=tool_call_id,
+            name="get_user_queries"
+        )
+        
+    return {
+        "messages": [tool_msg],
+        "next": "supervisor_sales_agent"
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -155,13 +344,15 @@ Catalog: Horsa-550X-Turbo, TrioSan Gold, MaxaPro-DS Dairy, MaxaPro Liquid, Buffa
 MANDATE:
 1. ALWAYS RESPOND IN ENGLISH.
 2. Be an enthusiastic, expert sales agent. Make users confident to buy Vrsa Agrotech animal nutrition products.
-3. Listen to their dairy/livestock needs (milk yield, fat %, animal stamina), explain specifically why our product is best.
-4. Seamlessly use internal facts & tool results provided below.
-5. End with a strong, clear call-to-action (ask to place order or confirm callback details).
+3. Use the facts and tool outputs in messages history to provide a clear, final answer to the user.
+4. Do NOT ask for village name, phone number, or other delivery details unless explicitly required by the tool or if you need to coordinate. (Keep the response focused and check if the tool result indicates a successful transaction/ticket).
+5. If a tool was executed successfully, summarize the order or ticket details clearly (e.g. Booking ID, Ticket ID) and thank them.
+6. If a tool was cancelled, inform them politely.
 """
 
+
 async def supervisor_sales_agent(state: SupervisorState) -> Dict[str, Any]:
-    """Generates the final streaming response to the user in English."""
+    """Generates the final response to the user in English."""
     messages = state.get("messages", [])
     facts = state.get("internal_facts", [])
 
@@ -176,7 +367,7 @@ async def supervisor_sales_agent(state: SupervisorState) -> Dict[str, Any]:
         if facts_str:
             system_content += f"\n\n--- INTERNAL DATA FACTS ---\n{facts_str}"
 
-    response = await llm.ainvoke([SystemMessage(content=system_content)] + messages)
+    response = await sub_agent_llm.ainvoke([SystemMessage(content=system_content)] + messages)
     return {"messages": [response], "next": "__end__"}
 
 
@@ -186,24 +377,45 @@ async def supervisor_sales_agent(state: SupervisorState) -> Dict[str, Any]:
 workflow = StateGraph(SupervisorState)
 workflow.add_node("supervisor_router", supervisor_router)
 workflow.add_node("rag_agent", run_rag_agent)
+workflow.add_node("booking_node", booking_node)
 workflow.add_node("booking_agent", run_booking_agent)
+workflow.add_node("booking_read_agent", run_booking_read_agent)
+workflow.add_node("query_node", query_node)
 workflow.add_node("query_agent", run_query_agent)
+workflow.add_node("query_read_agent", run_query_read_agent)
 workflow.add_node("supervisor_sales_agent", supervisor_sales_agent)
 
 workflow.set_entry_point("supervisor_router")
 
+
 def route_next(state: SupervisorState) -> str:
     return state.get("next", "supervisor_sales_agent")
 
+
 workflow.add_conditional_edges("supervisor_router", route_next, {
     "rag_agent": "rag_agent",
-    "booking_agent": "booking_agent",
-    "query_agent": "query_agent",
+    "booking_node": "booking_node",
+    "query_node": "query_node",
     "supervisor_sales_agent": "supervisor_sales_agent"
 })
+
+workflow.add_conditional_edges("booking_node", route_next, {
+    "booking_agent": "booking_agent",
+    "booking_read_agent": "booking_read_agent",
+    "__end__": END
+})
+
+workflow.add_conditional_edges("query_node", route_next, {
+    "query_agent": "query_agent",
+    "query_read_agent": "query_read_agent",
+    "__end__": END
+})
+
 workflow.add_edge("rag_agent", "supervisor_sales_agent")
 workflow.add_edge("booking_agent", "supervisor_sales_agent")
+workflow.add_edge("booking_read_agent", "supervisor_sales_agent")
 workflow.add_edge("query_agent", "supervisor_sales_agent")
+workflow.add_edge("query_read_agent", "supervisor_sales_agent")
 workflow.add_edge("supervisor_sales_agent", END)
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -216,5 +428,8 @@ except Exception as e:
     logger.warning(f"Upstash Redis checkpointer initialization failed ({e}). Falling back to MemorySaver.")
     checkpointer = MemorySaver()
 
-agent_graph = workflow.compile(checkpointer=checkpointer)
-logger.info("Supervisor Agent Graph with Booking & Query Sub-Agents compiled successfully!")
+agent_graph = workflow.compile(
+    checkpointer=checkpointer,
+    interrupt_before=["booking_agent", "query_agent"]
+)
+logger.info("Supervisor Agent Graph compiled successfully!")
