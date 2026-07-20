@@ -30,7 +30,7 @@ async def query_agent_node(state: AgentState, config: RunnableConfig) -> dict:
     user_id = state.get("user_id", "guest_user")
     
     # 1. Initialize LLM
-    llm = ChatOpenAI(model="gpt-4o-mini", openai_api_key=settings.OPENAI_API_KEY, temperature=0.0)
+    llm = ChatOpenAI(model="gpt-4o-mini", openai_api_key=settings.OPENAI_API_KEY, temperature=0.0, streaming=True)
     structured_llm = llm.with_structured_output(QueryExtraction)
     
     # 2. Extract user intent

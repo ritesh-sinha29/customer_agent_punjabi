@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.app.api.endpoints.ingest import router as ingest_router
 from src.app.api.endpoints.agent_chat import router as agent_chat_router
+from src.app.api.endpoints.threads import router as threads_router
 from src.app.services.llama_service import llama_service
 from src.app.services.pinecone_service import pinecone_service
 
@@ -12,7 +13,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
+@app.on_event("startup")
+def startup_event():
+    from src.app.services.db_service import db_service
+    db_service.ensure_chat_tables()
+
 # Configure CORS for Next.js client interaction
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Restrict to client domain in production
@@ -42,6 +49,7 @@ async def health_check():
 # Include routing
 app.include_router(ingest_router, prefix="/api")
 app.include_router(agent_chat_router, prefix="/api")
+app.include_router(threads_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn

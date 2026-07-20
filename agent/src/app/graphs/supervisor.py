@@ -2,6 +2,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import AIMessage
 from src.app.core.config import settings
 from src.app.graphs.state import AgentState
 
@@ -20,11 +21,18 @@ async def supervisor_node(state: AgentState, config: RunnableConfig) -> dict:
     """
     messages = state["messages"]
     
+    # 0. Loop Prevention: If a specialist agent has just returned an answer, stop and finish the turn.
+    if messages and messages[-1].type == "ai" and messages[-1].name in ["rag_agent", "booking_agent", "query_agent"]:
+        return {
+            "next": "FINISH"
+        }
+        
     # Standard LLM setup
     llm = ChatOpenAI(
         model="gpt-4o-mini",
         openai_api_key=settings.OPENAI_API_KEY,
-        temperature=0.0
+        temperature=0.0,
+        name="supervisor_router"
     )
     structured_llm = llm.with_structured_output(RouterOutput)
     
@@ -44,6 +52,33 @@ async def supervisor_node(state: AgentState, config: RunnableConfig) -> dict:
     payload = [{"role": "system", "content": system_prompt}] + messages
     decision = await structured_llm.ainvoke(payload, config)
     
+    # If the decision is to finish immediately (e.g. for chitchat/greetings/banter)
+    if decision.next_node == "FINISH":
+        if messages and messages[-1].type == "human":
+            # Generate a greeting/fallback message directly
+            greeting_llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                openai_api_key=settings.OPENAI_API_KEY,
+                temperature=0.7,
+                streaming=True,
+                name="supervisor_greeting"
+            )
+            chitchat_prompt = (
+                "You are the VRSA AGROTECH AI customer assistant.\n"
+                "The user is engaging in simple chitchat/greeting (like 'hi', 'hello', 'who are you', 'what can you do').\n"
+                "Respond politely, warmly, and briefly in the language they used (English or Punjabi/Hinglish), "
+                "introducing yourself and explaining that you can help them with animal nutrition/product info, "
+                "product bookings/orders, or customer support queries."
+            )
+            response = await greeting_llm.ainvoke(
+                [{"role": "system", "content": chitchat_prompt}] + messages,
+                config
+            )
+            return {
+                "messages": [AIMessage(content=response.content, name="supervisor")],
+                "next": "FINISH"
+            }
+            
     # Return the routing state change
     return {
         "next": decision.next_node

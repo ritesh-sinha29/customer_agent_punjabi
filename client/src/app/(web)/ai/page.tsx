@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   ChevronDown,
+  Copy,
   LeafyGreen,
   Loader2,
   Mic,
@@ -12,12 +13,14 @@ import {
   ShieldHalf,
   Sparkles,
   Syringe,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   User,
   Vegan,
 } from "lucide-react";
 import type * as React from "react";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -49,12 +52,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { signIn, signOut, useSession } from "@/lib/auth-client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { useAgentSSE } from "@/hooks/use-agent-sse";
+import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
+import { useSearchParams, useRouter } from "next/navigation";
 
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  reasoning?: string;
 }
 
 const SUGGESTIONS_EN = [
@@ -82,14 +89,61 @@ const SUGGESTION_ICONS = [
   <Syringe className="w-5 h-5 text-[#2E3A2F]" />,
 ];
 
-export default function AiPage() {
+function AiPageContent() {
   const { data: session } = useSession();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const urlThreadId = searchParams.get("threadId");
+
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
+
+  const [threadId, setThreadId] = useState<string>(() => {
+    return urlThreadId || `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  });
+  const userId = session?.user?.id || "guest_user";
+
+  const { messages, setMessages, isLoading, pendingApproval, sendMessage, sendApproval } =
+    useAgentSSE(threadId, userId);
+
+  // Sync URL query parameter and threadId state
+  useEffect(() => {
+    if (!urlThreadId && threadId) {
+      router.replace(`/ai?threadId=${threadId}`);
+    } else if (urlThreadId && urlThreadId !== threadId) {
+      setThreadId(urlThreadId);
+    }
+  }, [urlThreadId, threadId, router]);
+
+  // Load message history from DB when active thread changes
+  useEffect(() => {
+    if (!threadId) return;
+
+    let active = true;
+    const fetchMessages = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(`${backendUrl}/api/v1/agent/threads/${threadId}/messages`);
+        if (!res.ok) throw new Error("Failed to fetch messages");
+        const data = await res.json();
+        if (data.success && active) {
+          setMessages(data.messages);
+        }
+      } catch (err) {
+        console.error("Error fetching historical messages:", err);
+      }
+    };
+
+    fetchMessages();
+
+    return () => {
+      active = false;
+    };
+  }, [threadId, setMessages]);
+
+  const isTyping = isLoading;
 
   const suggestions = lang === "en" ? SUGGESTIONS_EN : SUGGESTIONS_PAN;
   const typedPlaceholder = useTypewriter(suggestions, 30, 15, 2000);
@@ -106,33 +160,32 @@ export default function AiPage() {
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isTyping) return;
+    if (!input.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    sendMessage(input.trim());
     setInput("");
-    setIsTyping(true);
+  };
 
-    // Mock answer response
-    setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content:
-          lang === "en"
-            ? `I received your query: "${userMessage.content}". How else can I help you with your cattle today?`
-            : `ਮੈਨੂੰ ਤੁਹਾਡਾ ਸਵਾਲ ਮਿਲ ਗਿਆ ਹੈ: "${userMessage.content}"। ਮੈਂ ਅੱਜ ਤੁਹਾਡੀ ਪਸ਼ੂਆਂ ਦੀ ਦੇਖਭਾਲ ਵਿੱਚ ਹੋਰ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      setIsTyping(false);
-    }, 1500);
+  const handleCopy = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.success("Response copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy text: ", err);
+      toast.error("Failed to copy response.");
+    }
+  };
+
+  const handleLike = (msgId: string) => {
+    toast.success("Thank you for your feedback!", {
+      description: "Response upvoted.",
+    });
+  };
+
+  const handleDislike = (msgId: string) => {
+    toast.success("Thank you for your feedback!", {
+      description: "Response downvoted.",
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -341,7 +394,7 @@ export default function AiPage() {
                   </div>
                 </Empty>
               ) : (
-                <MessageScrollerContent className="max-w-3xl mx-auto w-full gap-6 pb-6">
+                <MessageScrollerContent className="max-w-3xl mx-auto w-full gap-6 pt-10 pb-6">
                   {messages.map((msg) => (
                     <MessageScrollerItem key={msg.id}>
                       <Message align={msg.role === "user" ? "end" : "start"}>
@@ -359,7 +412,7 @@ export default function AiPage() {
                               </AvatarFallback>
                             </Avatar>
                           ) : (
-                            <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent">
+                            <Avatar className="h-8 w-8 ">
                               <AvatarImage
                                 src="/vrsa_logo.svg"
                                 alt="VRSA Logo"
@@ -372,52 +425,192 @@ export default function AiPage() {
                           )}
                         </MessageAvatar>
                         <MessageContent>
-                          <Bubble
-                            variant={msg.role === "user" ? "default" : "muted"}
-                          >
-                            <BubbleContent
-                              className={
-                                msg.role === "user"
-                                  ? "!bg-[#2E3A2F] !text-white"
-                                  : ""
+                          {msg.role === "assistant" && msg.reasoning && (
+                            <>
+                              {/* Case 1: Thinking phase (executing and no content yet) */}
+                              {isLoading &&
+                                msg.id === messages[messages.length - 1]?.id &&
+                                !msg.content && (
+                                  <div className="mb-2 w-full max-w-full">
+                                    <details
+                                      open
+                                      className="group text-xs text-emerald-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 select-none"
+                                    >
+                                      <summary className="cursor-pointer flex items-center justify-between list-none outline-none [&::-webkit-details-marker]:hidden">
+                                        <div className="flex items-center gap-2">
+                                          <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
+                                          <span className="font-bold">
+                                            Thinking...
+                                          </span>
+                                        </div>
+                                        <ChevronDown className="w-4 h-4 text-zinc-500 transition-transform duration-200 group-open:rotate-180" />
+                                      </summary>
+                                      <div className="mt-2 text-zinc-600 font-medium whitespace-pre-wrap leading-relaxed select-text">
+                                        {msg.reasoning}
+                                      </div>
+                                    </details>
+                                  </div>
+                                )}
+                            </>
+                          )}
+                          {msg.content && (
+                            <Bubble
+                              variant={
+                                msg.role === "user" ? "default" : "muted"
                               }
                             >
-                              {msg.content}
-                            </BubbleContent>
-                          </Bubble>
-                          <MessageFooter>{msg.timestamp}</MessageFooter>
+                              <BubbleContent
+                                className={
+                                  msg.role === "user"
+                                    ? "!bg-[#2E3A2F] !text-white"
+                                    : ""
+                                }
+                              >
+                                {msg.role === "user" ? (
+                                  msg.content
+                                ) : (
+                                  <MarkdownFormatter content={msg.content} />
+                                )}
+                              </BubbleContent>
+                            </Bubble>
+                          )}
+                          <MessageFooter className="flex items-center gap-3 w-full mt-0.5 min-h-[24px]">
+                            <div className="flex items-center gap-2 text-neutral-700 text-xs font-medium">
+                              <span>{msg.timestamp}</span>
+                              {msg.duration !== undefined && (
+                                <span>
+                                  • Executed in {msg.duration.toFixed(1)}s
+                                </span>
+                              )}
+                            </div>
+                            {msg.role === "assistant" && msg.content && (
+                              <div className="flex items-center gap-0.5 ">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md text-zinc-600 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                                  onClick={() => handleCopy(msg.content)}
+                                  title="Copy response"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md text-zinc-600 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                                  onClick={() => handleLike(msg.id)}
+                                  title="Like response"
+                                >
+                                  <ThumbsUp className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md text-zinc-600 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer shrink-0"
+                                  onClick={() => handleDislike(msg.id)}
+                                  title="Dislike response"
+                                >
+                                  <ThumbsDown className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </MessageFooter>
                         </MessageContent>
                       </Message>
                     </MessageScrollerItem>
                   ))}
 
-                  {isTyping && (
+                  {pendingApproval && (
                     <MessageScrollerItem>
-                      <Message align="start">
-                        <MessageAvatar>
-                          <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent animate-pulse">
-                            <AvatarImage
-                              src="/vrsa_logo.svg"
-                              alt="VRSA Logo"
-                              className="object-contain p-1"
-                            />
-                            <AvatarFallback className="bg-transparent text-[#2E3A2F] font-bold text-xs">
-                              VRSA
-                            </AvatarFallback>
-                          </Avatar>
-                        </MessageAvatar>
-                        <MessageContent>
-                          <Marker>
-                            <MarkerContent className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 rounded-2xl w-fit">
-                              <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.3s]" />
-                              <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.15s]" />
-                              <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce" />
-                            </MarkerContent>
-                          </Marker>
-                        </MessageContent>
-                      </Message>
+                      <div className="flex flex-col gap-3 p-4 bg-emerald-50/50 border border-emerald-200/60 rounded-2xl max-w-md mx-auto my-3 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
+                          <p className="text-xs font-bold text-emerald-800">
+                            {lang === "en"
+                              ? "Action Required"
+                              : "ਕਾਰਵਾਈ ਦੀ ਲੋੜ ਹੈ"}
+                          </p>
+                        </div>
+                        <div className="text-xs text-zinc-700 space-y-1 bg-white/60 p-2.5 rounded-lg border border-zinc-100">
+                          {pendingApproval.action === "booking" ? (
+                            <div>
+                              <strong>
+                                {lang === "en" ? "Product" : "ਉਤਪਾਦ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.product_name}
+                              <br />
+                              <strong>
+                                {lang === "en" ? "Quantity" : "ਮਾਤਰਾ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.quantity}
+                            </div>
+                          ) : (
+                            <div>
+                              <strong>
+                                {lang === "en" ? "Title" : "ਸਿਰਲੇਖ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.title}
+                              <br />
+                              <strong>
+                                {lang === "en" ? "Description" : "ਵੇਰਵਾ"}:
+                              </strong>{" "}
+                              {pendingApproval.details?.description}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => sendApproval(false)}
+                            className="px-3.5 py-1.5 border border-zinc-200 bg-white hover:bg-red-50 hover:text-red-600 text-zinc-600 rounded-full text-xs font-semibold cursor-pointer transition-all"
+                          >
+                            {lang === "en" ? "Cancel" : "ਰੱਦ ਕਰੋ"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => sendApproval(true)}
+                            className="px-3.5 py-1.5 bg-[#2E3A2F] hover:bg-[#3E4E3F] text-white rounded-full text-xs font-semibold cursor-pointer transition-all shadow-3xs"
+                          >
+                            {lang === "en"
+                              ? "Confirm & Proceed"
+                              : "ਪੁਸ਼ਟੀ ਕਰੋ ਅਤੇ ਅੱਗੇ ਵਧੋ"}
+                          </button>
+                        </div>
+                      </div>
                     </MessageScrollerItem>
                   )}
+
+                  {isTyping &&
+                    messages[messages.length - 1]?.role !== "assistant" && (
+                      <MessageScrollerItem>
+                        <Message align="start">
+                          <MessageAvatar>
+                            <Avatar className="h-8 w-8 border border-zinc-200 bg-transparent animate-pulse">
+                              <AvatarImage
+                                src="/vrsa_logo.svg"
+                                alt="VRSA Logo"
+                                className="object-contain p-1"
+                              />
+                              <AvatarFallback className="bg-transparent text-[#2E3A2F] font-bold text-xs">
+                                VRSA
+                              </AvatarFallback>
+                            </Avatar>
+                          </MessageAvatar>
+                          <MessageContent>
+                            <Marker>
+                              <MarkerContent className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 rounded-2xl w-fit">
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.3s]" />
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.15s]" />
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-zinc-400 animate-bounce" />
+                              </MarkerContent>
+                            </Marker>
+                          </MessageContent>
+                        </Message>
+                      </MessageScrollerItem>
+                    )}
                   {/* Scroll anchor */}
                   <MessageScrollerItem
                     scrollAnchor={true}
@@ -442,9 +635,18 @@ export default function AiPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={typedPlaceholder || (lang === "en" ? "Type your question or choose from suggestions..." : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ...")}
+              placeholder={
+                pendingApproval
+                  ? lang === "en"
+                    ? "Please confirm or cancel the action above..."
+                    : "ਕਿਰਪਾ ਕਰਕੇ ਉੱਪਰ ਦਿੱਤੀ ਕਾਰਵਾਈ ਦੀ ਪੁਸ਼ਟੀ ਜਾਂ ਰੱਦ ਕਰੋ..."
+                  : typedPlaceholder ||
+                    (lang === "en"
+                      ? "Type your question or choose from suggestions..."
+                      : "ਆਪਣਾ ਸਵਾਲ ਲਿਖੋ ਜਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਸੁਝਾਵਾਂ ਵਿੱਚੋਂ ਚੁਣੋ...")
+              }
               className="w-full bg-transparent border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none resize-none py-2 px-2 min-h-[44px] max-h-32 text-sm text-zinc-800 disabled:opacity-50"
-              disabled={isTyping}
+              disabled={isLoading || !!pendingApproval}
             />
 
             {/* Actions row below */}
@@ -456,7 +658,7 @@ export default function AiPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
-                  disabled={isTyping}
+                  disabled={isLoading || !!pendingApproval}
                   title="Attach file (decorative)"
                 >
                   <Paperclip className="w-4 h-4" />
@@ -466,7 +668,7 @@ export default function AiPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
-                  disabled={isTyping}
+                  disabled={isLoading || !!pendingApproval}
                   title="Voice input (decorative)"
                 >
                   <Mic className="w-4 h-4" />
@@ -476,7 +678,7 @@ export default function AiPage() {
               {/* Right action */}
               <Button
                 type="submit"
-                disabled={!input.trim() || isTyping}
+                disabled={!input.trim() || isLoading || !!pendingApproval}
                 className="h-9 px-4 bg-[#2E3A2F] text-white hover:bg-[#3E4E3F] transition-all rounded-full cursor-pointer disabled:opacity-40 shrink-0 flex items-center justify-center gap-1.5 text-xs font-semibold"
               >
                 <span>Send</span>
@@ -510,12 +712,18 @@ export default function AiPage() {
                 strokeLinejoin="round"
               />
             </svg>
-            <span>
-              {bottomDisclaimer}
-            </span>
+            <span>{bottomDisclaimer}</span>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AiPage() {
+  return (
+    <Suspense fallback={null}>
+      <AiPageContent />
+    </Suspense>
   );
 }

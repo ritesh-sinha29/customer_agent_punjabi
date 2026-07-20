@@ -10,6 +10,7 @@ from src.app.services.document_loader import document_loader
 from src.app.services.embedding_service import embedding_service
 from src.app.services.llama_service import llama_service
 from src.app.services.pinecone_service import pinecone_service
+from src.app.services.bm25_service import bm25_service
 
 # Set up logging for console prints
 logging.basicConfig(level=logging.INFO)
@@ -173,9 +174,12 @@ class IngestPipeline:
         chunk_texts = [c["text"] for c in chunks_output]
 
         try:
+            # Fit new texts to update the BM25 model vocabulary/stats
+            await asyncio.to_thread(bm25_service.fit_new_documents, chunk_texts)
+
             dense_vectors = await embedding_service.get_dense_embeddings(chunk_texts)
             sparse_vectors = await asyncio.to_thread(
-                embedding_service.get_sparse_embeddings, chunk_texts
+                bm25_service.get_document_sparse_vectors, chunk_texts
             )
         except Exception as e:
             logger.error(f"Pipeline error during Embedding stage: {e}")

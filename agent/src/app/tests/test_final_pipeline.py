@@ -18,6 +18,7 @@ from src.app.services.query_optimizer import query_optimizer
 from src.app.services.retrieval_service import retrieval_service
 from src.app.services.pinecone_service import pinecone_service
 from src.app.services.embedding_service import embedding_service
+from src.app.services.bm25_service import bm25_service
 
 
 def get_demo_chunks() -> list[str]:
@@ -52,8 +53,9 @@ async def ingest_demo_doc():
     print(f"Generated {len(chunks)} text chunks from demo.md.")
 
     # 1. Generate dense and sparse vectors in batch
+    bm25_service.fit_new_documents(chunks)
     dense_vectors = await embedding_service.get_dense_embeddings(chunks)
-    sparse_vectors = embedding_service.get_sparse_embeddings(chunks)
+    sparse_vectors = bm25_service.get_document_sparse_vectors(chunks)
 
     # 2. Package payloads
     pinecone_vectors = []

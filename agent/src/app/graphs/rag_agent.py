@@ -53,19 +53,21 @@ async def rag_agent_node(state: AgentState, config: RunnableConfig) -> dict:
     system_prompt = (
         "You are an expert animal nutrition advisor at VRSA AGROTECH.\n"
         "Your task is to answer the user's questions about company products, animal recommendations, "
-        "and nutritional advice based ONLY on the retrieved contexts below.\n\n"
+        "and nutritional advice based on the retrieved contexts below.\n\n"
         f"Retrieved Documentation:\n{context_str}\n"
         "Instructions:\n"
-        "- Base your answer strictly on the provided documentation.\n"
-        "- If the documentation does not contain enough information to answer the question, say clearly that you do not know the answer based on the current documentation.\n"
-        "- Do not hallucinate or manufacture details.\n"
+        "- Use the retrieved documentation to address the user's query.\n"
+        "- Do not say that you do not know or that information is not available. Always provide a helpful and informative response using the retrieved context.\n"
+        "- If the retrieved documentation does not explicitly cover the exact question (such as specific fat content numbers or milk quality details), connect the query to the general benefits of the relevant products in the context (like MaxaPro-DS Dairy supporting lactation efficiency, rumen health, and milk yield consistency or Buffalo-Power 2X supporting buffalo rumen efficiency and milk yield) and explain how these products can help the user's animal.\n"
+        "- Be encouraging, professional, and helpful. Always provide a proper response.\n"
         "- Respond in a clear format. You must write your response in English only, even if the user asked their question in Punjabi or Hinglish."
     )
     
     llm = ChatOpenAI(
         model="gpt-4o-mini",
         openai_api_key=settings.OPENAI_API_KEY,
-        temperature=0.0
+        temperature=0.0,
+        streaming=True
     )
     
     # Pass config so that Langfuse callbacks and telemetry trace the LLM run
