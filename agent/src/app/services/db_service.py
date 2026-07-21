@@ -93,18 +93,55 @@ class DbService:
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         """
+        create_eval_suite_run_table = """
+        CREATE TABLE IF NOT EXISTS eval_suite_run (
+            id TEXT PRIMARY KEY,
+            suite_name TEXT NOT NULL,
+            faithfulness_avg DOUBLE PRECISION DEFAULT 0.0,
+            relevance_avg DOUBLE PRECISION DEFAULT 0.0,
+            context_precision_avg DOUBLE PRECISION DEFAULT 0.0,
+            router_accuracy_avg DOUBLE PRECISION DEFAULT 0.0,
+            hallucination_rate DOUBLE PRECISION DEFAULT 0.0,
+            status TEXT NOT NULL DEFAULT 'RUNNING',
+            total_cases INTEGER DEFAULT 0,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        create_eval_result_table = """
+        CREATE TABLE IF NOT EXISTS eval_result (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL REFERENCES eval_suite_run(id) ON DELETE CASCADE,
+            testcase_id TEXT,
+            category TEXT,
+            query TEXT NOT NULL,
+            retrieved_contexts JSONB NOT NULL DEFAULT '[]',
+            generated_answer TEXT NOT NULL,
+            ground_truth TEXT,
+            expected_route TEXT,
+            actual_route TEXT,
+            faithfulness_score DOUBLE PRECISION DEFAULT 0.0,
+            relevance_score DOUBLE PRECISION DEFAULT 0.0,
+            hallucination_flag BOOLEAN DEFAULT FALSE,
+            judge_rationale TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
         create_thread_index = "CREATE INDEX IF NOT EXISTS idx_chat_thread_user_id ON chat_thread(user_id);"
         create_message_index = "CREATE INDEX IF NOT EXISTS idx_chat_message_thread_id ON chat_message(thread_id);"
+        create_eval_result_index = "CREATE INDEX IF NOT EXISTS idx_eval_result_run_id ON eval_result(run_id);"
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(create_thread_table)
                     cur.execute(create_message_table)
                     cur.execute(create_memory_table)
+                    cur.execute(create_eval_suite_run_table)
+                    cur.execute(create_eval_result_table)
                     cur.execute(create_thread_index)
                     cur.execute(create_message_index)
+                    cur.execute(create_eval_result_index)
                     conn.commit()
-            logger.info("Chat tables and indexes verified/created successfully.")
+            logger.info("Chat and evaluation tables and indexes verified/created successfully.")
         except Exception as e:
             logger.warning(f"Could not connect to PostgreSQL database: {e}")
 

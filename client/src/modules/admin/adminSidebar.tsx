@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, FileText, MessageSquare, Calendar } from "lucide-react";
+import { Home, FileText, MessageSquare, Calendar, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -35,6 +35,11 @@ const navigationItems = [
     title: "Bookings",
     url: "/home/bookings",
     icon: Calendar,
+  },
+  {
+    title: "Evaluation",
+    url: "/home/evaluation",
+    icon: Activity,
   },
 ];
 
