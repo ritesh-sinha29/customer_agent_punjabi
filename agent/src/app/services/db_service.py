@@ -85,6 +85,14 @@ class DbService:
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         """
+        create_memory_table = """
+        CREATE TABLE IF NOT EXISTS user_memory (
+            user_id TEXT PRIMARY KEY,
+            semantic_facts JSONB NOT NULL DEFAULT '[]',
+            episodic_summaries JSONB NOT NULL DEFAULT '[]',
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
         create_thread_index = "CREATE INDEX IF NOT EXISTS idx_chat_thread_user_id ON chat_thread(user_id);"
         create_message_index = "CREATE INDEX IF NOT EXISTS idx_chat_message_thread_id ON chat_message(thread_id);"
         try:
@@ -92,6 +100,7 @@ class DbService:
                 with conn.cursor() as cur:
                     cur.execute(create_thread_table)
                     cur.execute(create_message_table)
+                    cur.execute(create_memory_table)
                     cur.execute(create_thread_index)
                     cur.execute(create_message_index)
                     conn.commit()

@@ -3,6 +3,7 @@ import logging
 import json
 import asyncio
 import uuid
+import time
 from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -17,6 +18,25 @@ router = APIRouter(
     prefix="/v1/agent",
     tags=["Agent Chat"]
 )
+
+async def trigger_background_memory_workflow(user_id: str, thread_id: str):
+    try:
+        cnt_row = db_service.execute_query(
+            "SELECT COUNT(*) FROM chat_message WHERE thread_id = %s", (thread_id,)
+        )
+        count = list(cnt_row[0].values())[0] if cnt_row else 0
+        if count > 0 and count % 4 == 0:
+            logger.info(f"Message count is {count} (multiple of 4 - equivalent to 2 turns). Launching Temporal UserMemoryWorkflow in background.")
+            from src.app.temporal.temporal_client import get_temporal_client
+            temporal_client = await get_temporal_client()
+            await temporal_client.start_workflow(
+                "UserMemoryWorkflow",
+                args=[user_id, thread_id],
+                id=f"user-memory-workflow-{user_id}-{thread_id}-{int(time.time())}",
+                task_queue="ingestion-task-queue"
+            )
+    except Exception as te:
+        logger.error(f"Failed to start background memory Temporal workflow: {te}")
 
 def save_user_message(thread_id: str, user_id: str, message: str):
     try:
@@ -140,9 +160,29 @@ async def chat_endpoint(req: ChatRequest):
                 raise HTTPException(status_code=400, detail="Message cannot be empty.")
                 
             save_user_message(req.thread_id, req.user_id, req.message)
+            
+            # Fetch user memory profile from DB
+            user_profile = {"semantic_facts": [], "episodic_summaries": []}
+            try:
+                memory_row = db_service.execute_query(
+                    "SELECT semantic_facts, episodic_summaries FROM user_memory WHERE user_id = %s",
+                    (req.user_id,)
+                )
+                if memory_row:
+                    user_profile = {
+                        "semantic_facts": memory_row[0].get("semantic_facts") or [],
+                        "episodic_summaries": memory_row[0].get("episodic_summaries") or []
+                    }
+            except Exception as me:
+                logger.error(f"Error loading user profile memory: {me}")
+
             initial_state = {
                 "messages": [HumanMessage(content=req.message)],
-                "user_id": req.user_id
+                "user_id": req.user_id,
+                "user_profile": user_profile,
+                "internal_facts": [],
+                "action_type": None,
+                "pending_action_details": None
             }
             final_state = await agent_graph.ainvoke(initial_state, config)
             
@@ -170,6 +210,9 @@ async def chat_endpoint(req: ChatRequest):
         ]
         reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
         save_assistant_message(req.thread_id, reply)
+        
+        # Trigger background memory check if message count is a multiple of 3
+        await trigger_background_memory_workflow(req.user_id, req.thread_id)
         
         return {
             "success": True,
@@ -252,9 +295,26 @@ async def chat_stream_endpoint(req: ChatRequest):
                     return
                     
                 save_user_message(req.thread_id, req.user_id, req.message)
+                
+                # Fetch user memory profile from DB
+                user_profile = {"semantic_facts": [], "episodic_summaries": []}
+                try:
+                    memory_row = db_service.execute_query(
+                        "SELECT semantic_facts, episodic_summaries FROM user_memory WHERE user_id = %s",
+                        (req.user_id,)
+                    )
+                    if memory_row:
+                        user_profile = {
+                            "semantic_facts": memory_row[0].get("semantic_facts") or [],
+                            "episodic_summaries": memory_row[0].get("episodic_summaries") or []
+                        }
+                except Exception as me:
+                    logger.error(f"Error loading user profile memory: {me}")
+
                 initial_state = {
                     "messages": [HumanMessage(content=req.message)],
                     "user_id": req.user_id,
+                    "user_profile": user_profile,
                     "internal_facts": [],
                     "action_type": None,
                     "pending_action_details": None
@@ -286,6 +346,10 @@ async def chat_stream_endpoint(req: ChatRequest):
                 ]
                 reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
                 save_assistant_message(req.thread_id, reply)
+                
+                # Trigger background memory check if message count is a multiple of 3
+                await trigger_background_memory_workflow(req.user_id, req.thread_id)
+                
                 payload = {
                     "type": "completed",
                     "status": "completed",

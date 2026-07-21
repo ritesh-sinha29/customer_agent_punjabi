@@ -3,9 +3,15 @@ import logging
 
 from temporalio.worker import Worker
 
-from src.app.temporal.activities import ingest_document_activity
+from src.app.temporal.activities import (
+    ingest_document_activity,
+    fetch_user_conversation_activity,
+    check_message_usefulness_groq_activity,
+    consolidate_user_memory_activity,
+    embed_and_save_user_memory_activity,
+)
 from src.app.temporal.temporal_client import get_temporal_client
-from src.app.temporal.workflows import DocumentIngestionWorkflow
+from src.app.temporal.workflows import DocumentIngestionWorkflow, UserMemoryWorkflow
 
 # Configure logging
 logging.basicConfig(
@@ -17,12 +23,18 @@ async def main():
     # Connect to the Temporal client
     client = await get_temporal_client()
 
-    # Initialize the worker with our workflow and activity
+    # Initialize the worker with our workflows and activities
     worker = Worker(
         client,
         task_queue="ingestion-task-queue",
-        workflows=[DocumentIngestionWorkflow],
-        activities=[ingest_document_activity],
+        workflows=[DocumentIngestionWorkflow, UserMemoryWorkflow],
+        activities=[
+            ingest_document_activity,
+            fetch_user_conversation_activity,
+            check_message_usefulness_groq_activity,
+            consolidate_user_memory_activity,
+            embed_and_save_user_memory_activity,
+        ],
     )
 
     logging.info(

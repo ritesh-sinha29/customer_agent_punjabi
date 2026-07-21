@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { toast } from "sonner";
 
 export interface Message {
@@ -9,6 +9,7 @@ export interface Message {
   reasoning?: string;
   duration?: number;
   approvalCard?: PendingApproval;
+  memoryUpdated?: boolean;
 }
 
 export interface PendingApproval {
@@ -26,6 +27,25 @@ export function useAgentSSE(threadId: string, userId: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] =
     useState<PendingApproval | null>(null);
+  const lastSeenSummaryRef = useRef<string>("");
+
+  // Initialize the ref with the user's existing latest memory summary on load
+  useEffect(() => {
+    if (!userId) return;
+    const initializeMemoryRef = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/agent/memory?user_id=${userId}`);
+        if (res.ok) {
+          const memData = await res.json();
+          const summaries = memData.episodic_summaries || [];
+          lastSeenSummaryRef.current = summaries[summaries.length - 1] || "";
+        }
+      } catch (err) {
+        console.error("Failed to initialize memory ref on load:", err);
+      }
+    };
+    initializeMemoryRef();
+  }, [userId]);
 
   const startStream = useCallback(
     async (body: any) => {
@@ -100,7 +120,8 @@ export function useAgentSSE(threadId: string, userId: string) {
               if (data.type === "token") {
                 accumulatedText += data.content;
                 if (!durationRecorded) {
-                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
+                  duration =
+                    (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 setMessages((prev) =>
@@ -123,7 +144,8 @@ export function useAgentSSE(threadId: string, userId: string) {
                 );
               } else if (data.type === "pending_approval") {
                 if (!durationRecorded) {
-                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
+                  duration =
+                    (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 setPendingApproval({
@@ -144,19 +166,20 @@ export function useAgentSSE(threadId: string, userId: string) {
                     data.tool === "create_booking"
                       ? "Your products have been booked! You will get notified by our company soon."
                       : "Your support request has been submitted successfully!",
-                    { duration: 5000 }
+                    { duration: 5000 },
                   );
                   toastFired = true;
                 }
               } else if (data.type === "completed") {
                 if (!durationRecorded) {
-                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
+                  duration =
+                    (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 if (body?.approve === true && !toastFired) {
                   toast.success(
                     "Your products have been booked! You will get notified by our company soon.",
-                    { duration: 5000 }
+                    { duration: 5000 },
                   );
                   toastFired = true;
                 }
@@ -167,9 +190,50 @@ export function useAgentSSE(threadId: string, userId: string) {
                       : msg,
                   ),
                 );
+
+                // Poll memory endpoint every 2 seconds (up to 6 times) to capture background update
+                let pollAttempts = 0;
+                const intervalId = setInterval(async () => {
+                  pollAttempts++;
+                  try {
+                    const res = await fetch(
+                      `${BACKEND_URL}/api/v1/agent/memory?user_id=${userId}`,
+                    );
+                    if (res.ok) {
+                      const memData = await res.json();
+                      const summaries = memData.episodic_summaries || [];
+                      const latestSummary = summaries[summaries.length - 1] || "";
+
+                      if (
+                        latestSummary &&
+                        latestSummary !== lastSeenSummaryRef.current
+                      ) {
+                        lastSeenSummaryRef.current = latestSummary;
+                        clearInterval(intervalId);
+                        toast.success("Your new memory is updated.", {
+                          duration: 5000,
+                        });
+                        setMessages((prev) =>
+                          prev.map((msg) =>
+                            msg.id === assistantMessageId
+                              ? { ...msg, memoryUpdated: true }
+                              : msg,
+                          ),
+                        );
+                      }
+                    }
+                  } catch (err) {
+                    console.error("Error verifying memory update:", err);
+                  }
+
+                  if (pollAttempts >= 6) {
+                    clearInterval(intervalId);
+                  }
+                }, 2000);
               } else if (data.type === "error") {
                 if (!durationRecorded) {
-                  duration = (Date.now() - (reasoningStartTime || startTime)) / 1000;
+                  duration =
+                    (Date.now() - (reasoningStartTime || startTime)) / 1000;
                   durationRecorded = true;
                 }
                 if (body?.approve === true) {
@@ -242,7 +306,7 @@ export function useAgentSSE(threadId: string, userId: string) {
   const sendApproval = useCallback(
     (approved: boolean) => {
       const confirmText = approved ? "Yes, confirm." : "No, cancel.";
-      
+
       const cardToPreserve: PendingApproval | undefined = pendingApproval
         ? {
             ...pendingApproval,

@@ -103,6 +103,27 @@ class PineconeService:
             logger.error(f"Failed to delete vectors by doc_id: {e}")
             return False
 
+    def delete_by_user_id(self, user_id: str, namespace: str = None) -> bool:
+        """
+        Deletes all vector chunks matching a specific user_id from a namespace.
+        Used for purging and rebuilding user memory.
+        """
+        if not self.index:
+            logger.error("Pinecone index is not initialized.")
+            return False
+
+        logger.info(
+            f"[Step 6 - Pinecone] Purging existing vectors for user_id={user_id} in namespace='{namespace or 'default'}'..."
+        )
+        try:
+            # Delete by metadata filter
+            self.index.delete(filter={"user_id": {"$eq": user_id}}, namespace=namespace)
+            logger.info(f"[Step 6 - Pinecone] Purge completed for user_id={user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete vectors by user_id: {e}")
+            return False
+
     def upsert_vectors(
         self, vectors: List[Dict[str, Any]], namespace: str = None
     ) -> int:

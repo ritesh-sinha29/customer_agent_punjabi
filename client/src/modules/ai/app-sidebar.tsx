@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
 
 interface Thread {
   id: string;
@@ -115,25 +117,29 @@ function AppSidebarInner({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar {...props}>
-      <SidebarHeader className="px-4 py-3 border-b border-zinc-100 flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-[#2E3A2F]">
-          <Leaf className="w-5 h-5 fill-emerald-600 text-emerald-600" />
-          <span className="font-bold text-sm tracking-wide">
-            VRSA AGROTECH AI
-          </span>
+      <SidebarHeader className="px-4 py-3 border-b border-zinc-300 flex flex-col gap-2">
+        <div className="flex items-center gap-2 ">
+          <Image
+            src="/vrsa_logo.svg"
+            width={40}
+            height={40}
+            alt="VRSA AGROTECH AI"
+          />
+          <span className="font-bold text-xl tracking-wide">VRSA AGRO</span>
         </div>
-        <button
+      </SidebarHeader>
+
+      <SidebarContent className="px-3 py-2">
+        <Button
+          variant={"outline"}
           onClick={handleNewChat}
-          className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-full border border-zinc-200/80 bg-zinc-50 hover:bg-zinc-100 text-[#2E3A2F] text-xs font-semibold shadow-xs transition-all active:scale-98 cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 rounded-sm! text-xs cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           New Chat
-        </button>
-      </SidebarHeader>
-
-      <SidebarContent className="px-2 py-2">
+        </Button>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-zinc-400 text-[10px] font-semibold tracking-wider uppercase mb-1">
+          <SidebarGroupLabel className="text-zinc-700 text-xs font-semibold flex items-center justify-center mb-1">
             Recent Chats
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -188,13 +194,20 @@ function AppSidebarInner({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarFooter className="">
         {/* BOXX */}
-        <div className="flex flex-col border rounded-sm p-5 bg-linear-to-br from-white to-green-700/20">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider leading-relaxed">
+        <div className="flex flex-col border rounded-sm p-4 bg-linear-to-br from-white to-emerald-700/40 relative">
+          <div className="text-xs capitalize ">
             fueling punjab , nourishing livestock.
           </div>
-          <div className="font-gurmukhi text-sm text-[#2E3A2F] font-semibold leading-relaxed">
+          <div className="font-gurmukhi text-sm ">
             ਪੰਜਾਬ ਨੂੰ ਊਰਜਾ, ਪਸ਼ੂਧਨ ਨੂੰ ਪੋਸ਼ਣ।
           </div>
+          <Image
+            src="/crop.svg"
+            width={50}
+            height={50}
+            alt="VRSA AGROTECH AI"
+            className="absolute right-1 bottom-0"
+          />
         </div>
         <div className="flex items-center gap-2 pt-3 border-t justify-center w-full">
           <div className="w-6 h-6 rounded-full bg-[#2E3A2F]/10 flex items-center justify-center text-[#2E3A2F] font-bold text-xs ml-5">

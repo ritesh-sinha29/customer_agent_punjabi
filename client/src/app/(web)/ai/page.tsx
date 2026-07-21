@@ -62,6 +62,8 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   reasoning?: string;
+  duration?: number;
+  memoryUpdated?: boolean;
 }
 
 const SUGGESTIONS_EN = [
@@ -542,6 +544,12 @@ function AiPageContent() {
                               {msg.duration !== undefined && (
                                 <span>
                                   • Executed in {msg.duration.toFixed(1)}s
+                                </span>
+                              )}
+                              {msg.memoryUpdated && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                  Memory Updated
                                 </span>
                               )}
                             </div>

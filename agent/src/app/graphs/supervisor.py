@@ -355,8 +355,24 @@ async def supervisor_sales_agent(state: SupervisorState) -> Dict[str, Any]:
     """Generates the final response to the user in English."""
     messages = state.get("messages", [])
     facts = state.get("internal_facts", [])
+    user_profile = state.get("user_profile") or {}
 
     system_content = SALES_PROMPT
+
+    # Inject user memory context (core memory)
+    memory_str = ""
+    semantic_facts = user_profile.get("semantic_facts", [])
+    if semantic_facts:
+        memory_str += "\n[Farmer Profile Facts (Long Term)]:\n" + "\n".join([f"- {f}" for f in semantic_facts])
+    
+    episodic_summaries = user_profile.get("episodic_summaries", [])
+    if episodic_summaries:
+        # Get the latest episodic summary to keep context concise but relevant
+        memory_str += f"\n[Latest Past Interaction Summary]:\n- {episodic_summaries[-1]}"
+        
+    if memory_str:
+        system_content += f"\n\n--- FARMER MEMORY PROFILE ---\n{memory_str}"
+
     if facts:
         facts_str = ""
         for item in facts:

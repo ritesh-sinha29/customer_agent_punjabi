@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.app.api.endpoints.ingest import router as ingest_router
 from src.app.api.endpoints.agent_chat import router as agent_chat_router
 from src.app.api.endpoints.threads import router as threads_router
+from src.app.api.endpoints.memory import router as memory_router
 from src.app.services.llama_service import llama_service
 from src.app.services.pinecone_service import pinecone_service
 
@@ -48,6 +49,7 @@ async def health_check():
 app.include_router(ingest_router, prefix="/api")
 app.include_router(agent_chat_router, prefix="/api")
 app.include_router(threads_router, prefix="/api")
+app.include_router(memory_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
