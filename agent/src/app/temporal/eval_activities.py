@@ -15,10 +15,15 @@ from src.app.core.config import settings
 
 logger = logging.getLogger("EvalActivities")
 
+groq_api_key = os.getenv("GROQ_API_KEY", "").strip('"')
+eval_model_name = os.getenv("EVAL_MODEL", "llama-3.3-70b-versatile")
+
+# Use GROQ ONLY for LLM-as-a-Judge to save OpenAI credits
 llm_eval = ChatOpenAI(
-    model=os.getenv("EVAL_MODEL", "gpt-4.1-mini"),
+    model=eval_model_name,
     temperature=0.0,
-    api_key=settings.OPENAI_API_KEY,
+    api_key=groq_api_key,
+    base_url="https://api.groq.com/openai/v1",
 )
 
 
