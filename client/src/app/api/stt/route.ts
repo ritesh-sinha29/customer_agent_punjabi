@@ -40,16 +40,16 @@ export async function POST(req: Request) {
 
     const groqFormData = new FormData();
     groqFormData.append("file", audioFile, "audio.webm");
-    groqFormData.append("model", "whisper-large-v3-turbo");
-    groqFormData.append("language", "en");
+    groqFormData.append("model", "whisper-large-v3");
+    groqFormData.append("language", "pa");
 
-    // Domain prompt to guide English transcription
+    // Domain prompt to guide Punjabi transcription
     groqFormData.append(
       "prompt",
-      "The audio contains spoken Punjabi, Hindi or Hinglish about cows, buffaloes, milk yield, animal feed, mineral mixture, powder, veterinary medicines, VRSA products, and livestock.",
+      "The audio contains spoken Punjabi about cows, buffaloes, milk yield, animal feed, mineral mixture, powder, veterinary medicines, VRSA products, and livestock.",
     );
 
-    // Step 1: Call Groq Transcriptions Endpoint with language="en"
+    // Step 1: Call Groq Transcriptions Endpoint with language="pa"
     const response = await fetch(
       "https://api.groq.com/openai/v1/audio/transcriptions",
       {
@@ -75,13 +75,13 @@ export async function POST(req: Request) {
 
     console.log("\n========================================================");
     console.log(
-      "🎤 Step 1 - GROQ ENGLISH TRANSCRIPTION:",
+      "🎤 Step 1 - GROQ PUNJABI (PA) TRANSCRIPTION:",
       transcribedEnglishText,
     );
 
     let finalEnglishText = transcribedEnglishText;
 
-    // Step 2: Use OpenAI (gpt-4o-mini) to convert Romanized Punjabi / Hinglish transcription into clean English sentence
+    // Step 2: Use OpenAI to translate Punjabi (Gurmukhi) into clean English
     if (transcribedEnglishText) {
       try {
         const openaiApiKey = getOpenaiApiKey();
@@ -97,12 +97,12 @@ export async function POST(req: Request) {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: "gpt-4o-mini",
+                model: "gpt-4.1-mini",
                 messages: [
                   {
                     role: "system",
                     content:
-                      'You are an expert AI translator for a dairy farming and livestock app. Convert Romanized Punjabi, Hinglish, or Punjabi-style English sentences into clean, grammatically correct, natural English.\n\nEnsure Punjabi words are translated accurately:\n- "majh" or "majha" -> "buffalo" or "cow" (prefer "buffalo" as it is the literal translation, but ensure it flows naturally as livestock)\n- "kol" or "kool" -> "have" (e.g., "mere kol" or "mere kool" means "I have")\n- "panch" or "panj" -> "5" or "five"\n- "das" or "dass" -> "10" or "ten"\n- "murgian" or "murgiane" -> "hens" or "chickens"\n\nExample conversions:\n- "Mere kool panch majh ne das murgiane." -> "I have 5 buffaloes and 10 hens."\n- "mere kol do majha te ik gaa hai" -> "I have two buffaloes and one cow."\n\nTranslate the user\'s input directly into natural English. Do NOT add any preamble, explanation, conversational filler, or quotes. Output ONLY the clean English sentence.',
+                      "You are an expert AI translator for a dairy farming and livestock app. Translate the following Punjabi (Gurmukhi script) sentence into clean, natural English. Context: dairy farming, buffaloes, cows, hens, mineral mixture, animal feed, VRSA products. Output ONLY the English translation, no preamble or quotes.",
                   },
                   {
                     role: "user",
