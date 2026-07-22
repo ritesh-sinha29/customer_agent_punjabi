@@ -24,7 +24,8 @@ class RetrievalService:
         dense_vec: List[float], 
         sparse_vec: Dict[str, Any], 
         top_k: int, 
-        namespace: str
+        namespace: str,
+        filter: Dict[str, Any] = None
     ) -> List[Dict[str, Any]]:
         """
         Executes a single hybrid query against Pinecone in a worker thread.
@@ -36,7 +37,8 @@ class RetrievalService:
                 dense_vector=dense_vec,
                 sparse_vector=sparse_vec,
                 top_k=top_k,
-                namespace=namespace
+                namespace=namespace,
+                filter=filter
             )
             return results
         except Exception as e:
@@ -87,6 +89,10 @@ class RetrievalService:
 
         # 3. Query Pinecone in parallel with an expanded candidate pool size
         candidate_top_k = max(top_k * 3, 15)
+        filter_dict = None
+        if namespace == "user_memory" and user_id:
+            filter_dict = {"user_id": {"$eq": user_id}}
+
         tasks = []
         for i, query in enumerate(queries):
             dense_vec = dense_vectors[i] if i < len(dense_vectors) else None
@@ -98,7 +104,8 @@ class RetrievalService:
                     dense_vec=dense_vec,
                     sparse_vec=sparse_vec,
                     top_k=candidate_top_k,
-                    namespace=namespace
+                    namespace=namespace,
+                    filter=filter_dict
                 )
             )
 

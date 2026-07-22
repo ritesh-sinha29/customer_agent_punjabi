@@ -186,7 +186,8 @@ class PineconeService:
         dense_vector: List[float],
         sparse_vector: Dict[str, Any] = None,
         top_k: int = 5,
-        namespace: str = "default"
+        namespace: str = "default",
+        filter: Dict[str, Any] = None
     ) -> List[Dict[str, Any]]:
         """
         Queries Pinecone index with dense and sparse vectors (hybrid search).
@@ -202,6 +203,8 @@ class PineconeService:
                 "include_metadata": True,
                 "namespace": target_namespace
             }
+            if filter:
+                query_args["filter"] = filter
             if dense_vector is not None:
                 query_args["vector"] = dense_vector
             if sparse_vector is not None and self.supports_sparse:

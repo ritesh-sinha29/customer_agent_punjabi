@@ -375,7 +375,11 @@ async def deep_memory_node(state: SupervisorState) -> Dict[str, Any]:
             original_query=last_user_query
         )
         for match in matches:
-            text = match.get("metadata", {}).get("text") or match.get("metadata", {}).get("content")
+            meta = match.get("metadata") or {}
+            # Double safety guard: ensure vector belongs to the requesting user
+            if meta.get("user_id") and meta.get("user_id") != user_id:
+                continue
+            text = meta.get("text") or meta.get("content")
             if text and text not in relevant_snippets:
                 relevant_snippets.append(text)
     except Exception as e:
