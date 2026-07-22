@@ -1,4 +1,22 @@
+import fs from "fs";
 import { NextResponse } from "next/server";
+import path from "path";
+
+function getOpenaiApiKey(): string {
+  try {
+    const envPath = path.join(process.cwd(), ".env");
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, "utf-8");
+      const match = content.match(/^OPENAI_API_KEY\s*=\s*([^\r\n]+)/m);
+      if (match && match[1]) {
+        return match[1].trim().replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch (error) {
+    console.error("Error reading OPENAI_API_KEY from .env file:", error);
+  }
+  return process.env.OPENAI_API_KEY || "";
+}
 
 export async function POST(req: Request) {
   try {
@@ -63,50 +81,57 @@ export async function POST(req: Request) {
 
     let finalEnglishText = transcribedEnglishText;
 
-    // Step 2: Use Groq Llama 3.3 70B to convert English/Hinglish transcription into clean English sentence
+    // Step 2: Use OpenAI (gpt-4o-mini) to convert Romanized Punjabi / Hinglish transcription into clean English sentence
     if (transcribedEnglishText) {
       try {
-        const llmRes = await fetch(
-          "https://api.groq.com/openai/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "llama-3.3-70b-versatile",
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "You are an expert AI assistant for a dairy farming app. Convert the transcribed input text (which may be in English, Hinglish, or Romanized Punjabi) into a clean, accurate, natural English question or statement. Do NOT add any preamble, conversational filler, or quotes. Output ONLY the clean English sentence.",
-                },
-                {
-                  role: "user",
-                  content: transcribedEnglishText,
-                },
-              ],
-              temperature: 0.1,
-              max_tokens: 150,
-            }),
-          },
-        );
-
-        if (llmRes.ok) {
-          const llmData = await llmRes.json();
-          const translated = llmData.choices?.[0]?.message?.content?.trim();
-          if (translated) {
-            finalEnglishText = translated.replace(/^["']|["']$/g, "");
-          }
+        const openaiApiKey = getOpenaiApiKey();
+        if (!openaiApiKey) {
+          console.error("OPENAI_API_KEY is not configured on Next.js server.");
         } else {
-          console.error(
-            "Llama translation returned error status:",
-            llmRes.status,
+          const llmRes = await fetch(
+            "https://api.openai.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${openaiApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      'You are an expert AI translator for a dairy farming and livestock app. Convert Romanized Punjabi, Hinglish, or Punjabi-style English sentences into clean, grammatically correct, natural English.\n\nEnsure Punjabi words are translated accurately:\n- "majh" or "majha" -> "buffalo" or "cow" (prefer "buffalo" as it is the literal translation, but ensure it flows naturally as livestock)\n- "kol" or "kool" -> "have" (e.g., "mere kol" or "mere kool" means "I have")\n- "panch" or "panj" -> "5" or "five"\n- "das" or "dass" -> "10" or "ten"\n- "murgian" or "murgiane" -> "hens" or "chickens"\n\nExample conversions:\n- "Mere kool panch majh ne das murgiane." -> "I have 5 buffaloes and 10 hens."\n- "mere kol do majha te ik gaa hai" -> "I have two buffaloes and one cow."\n\nTranslate the user\'s input directly into natural English. Do NOT add any preamble, explanation, conversational filler, or quotes. Output ONLY the clean English sentence.',
+                  },
+                  {
+                    role: "user",
+                    content: transcribedEnglishText,
+                  },
+                ],
+                temperature: 0.1,
+                max_tokens: 150,
+              }),
+            },
           );
+
+          if (llmRes.ok) {
+            const llmData = await llmRes.json();
+            const translated = llmData.choices?.[0]?.message?.content?.trim();
+            if (translated) {
+              finalEnglishText = translated.replace(/^["']|["']$/g, "");
+            }
+          } else {
+            const errText = await llmRes.text();
+            console.error(
+              "OpenAI translation returned error status:",
+              llmRes.status,
+              errText,
+            );
+          }
         }
       } catch (llmErr) {
-        console.error("Groq LLM translation error:", llmErr);
+        console.error("OpenAI LLM translation error:", llmErr);
       }
     }
 

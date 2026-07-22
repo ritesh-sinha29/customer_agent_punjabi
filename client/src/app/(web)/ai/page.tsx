@@ -19,8 +19,9 @@ import {
   User,
   Vegan,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
-import { useState, useEffect, useRef, Suspense } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -33,6 +34,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
 import { Marker, MarkerContent } from "@/components/ui/marker";
 import {
   Message,
@@ -48,13 +50,12 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Textarea } from "@/components/ui/textarea";
-import { signIn, signOut, useSession } from "@/lib/auth-client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useTypewriter } from "@/hooks/use-typewriter";
+import { Textarea } from "@/components/ui/textarea";
 import { useAgentSSE } from "@/hooks/use-agent-sse";
-import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useTypewriter } from "@/hooks/use-typewriter";
+import { signIn, signOut, useSession } from "@/lib/auth-client";
+import { LiveWaveform } from "@/modules/ai/live-waveform";
 
 interface ChatMessage {
   id: string;
@@ -112,7 +113,10 @@ function AiPageContent() {
     if (isTranscribing) return;
 
     if (isRecording) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
         mediaRecorderRef.current.stop();
       }
       setIsRecording(false);
@@ -129,7 +133,9 @@ function AiPageContent() {
       audioChunksRef.current = [];
 
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : undefined,
+        mimeType: MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : undefined,
       });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -155,7 +161,7 @@ function AiPageContent() {
         const toastId = toast.loading(
           lang === "en"
             ? "Transcribing & translating your voice to English..."
-            : "ਤੁਹਾਡੀ ਆਵਾਜ਼ ਨੂੰ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ..."
+            : "ਤੁਹਾਡੀ ਆਵਾਜ਼ ਨੂੰ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ...",
         );
 
         try {
@@ -180,14 +186,18 @@ function AiPageContent() {
               lang === "en"
                 ? "Converted to English!"
                 : "ਆਵਾਜ਼ ਸਫਲਤਾਪੂਰਵਕ ਅੰਗਰੇਜ਼ੀ 'ਚ ਤਬਦੀਲ ਹੋ ਗਈ!",
-              { id: toastId }
+              { id: toastId },
             );
           } else {
-            toast.error("Could not recognize any spoken text.", { id: toastId });
+            toast.error("Could not recognize any spoken text.", {
+              id: toastId,
+            });
           }
         } catch (err: any) {
           console.error("STT Error:", err);
-          toast.error(err.message || "Failed to transcribe audio.", { id: toastId });
+          toast.error(err.message || "Failed to transcribe audio.", {
+            id: toastId,
+          });
         } finally {
           setIsTranscribing(false);
         }
@@ -198,7 +208,7 @@ function AiPageContent() {
       toast.info(
         lang === "en"
           ? "Listening... Speak in Punjabi, Hindi or English. Click mic again to finish."
-          : "ਸੁਣ ਰਿਹਾ ਹੈ... ਪੰਜਾਬੀ, ਹਿੰਦੀ ਜਾਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬੋਲੋ। ਪੂਰਾ ਹੋਣ 'ਤੇ ਮਾਈਕ 'ਤੇ ਕਲਿੱਕ ਕਰੋ।"
+          : "ਸੁਣ ਰਿਹਾ ਹੈ... ਪੰਜਾਬੀ, ਹਿੰਦੀ ਜਾਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬੋਲੋ। ਪੂਰਾ ਹੋਣ 'ਤੇ ਮਾਈਕ 'ਤੇ ਕਲਿੱਕ ਕਰੋ।",
       );
     } catch (err) {
       console.error("Microphone access error:", err);
@@ -846,16 +856,16 @@ function AiPageContent() {
                     isRecording
                       ? "bg-red-100 text-red-600 hover:bg-red-200 border border-red-300"
                       : isTranscribing
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5"
                   }`}
                   disabled={isLoading || !!pendingApproval || isTranscribing}
                   title={
                     isRecording
                       ? "Click to stop & transcribe"
                       : isTranscribing
-                      ? "Transcribing voice..."
-                      : "Voice input (Speak in Punjabi / Hindi / English)"
+                        ? "Transcribing voice..."
+                        : "Voice input (Speak in Punjabi / Hindi / English)"
                   }
                 >
                   {isTranscribing ? (
@@ -870,6 +880,19 @@ function AiPageContent() {
                   )}
                 </Button>
               </div>
+
+              {/* Centered waveform */}
+              {(isRecording || isTranscribing) && (
+                <div className="flex-1 max-w-[200px] mx-4 h-9 flex items-center justify-center">
+                  <LiveWaveform
+                    active={isRecording}
+                    processing={isTranscribing}
+                    mode="static"
+                    height={28}
+                    barColor={isRecording ? "#ef4444" : "#10b981"}
+                  />
+                </div>
+              )}
 
               {/* Right action */}
               <Button
