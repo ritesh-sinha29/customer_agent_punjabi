@@ -12,14 +12,15 @@ from src.app.tools.booking_tools import create_booking, get_booking_updates
 from src.app.tools.query_tools import create_query, get_user_queries
 from src.app.core.config import settings
 from src.app.graphs.state import SupervisorState
+from src.app.services.retrieval_service import retrieval_service
+from src.app.services.db_service import db_service
 
 logger = logging.getLogger("SupervisorAgent")
 
-# Retrieve supervisor model names
 model_name = os.getenv("SUPERVISOR_MODEL", "gpt-4.1-mini")
 sub_agent_model = "gpt-4.1-mini"
 
-# Supervisor main routing model (gpt-5.1)
+# Supervisor main routing model 
 llm = ChatOpenAI(model=model_name, temperature=0.3, api_key=settings.OPENAI_API_KEY)
 # Sub-agent model (gpt-4.1-mini)
 sub_agent_llm = ChatOpenAI(model=sub_agent_model, temperature=0.2, api_key=settings.OPENAI_API_KEY)
@@ -34,7 +35,7 @@ query_llm = sub_agent_llm.bind_tools([create_query, get_user_queries])
 # -----------------------------------------------------------------------------
 class SupervisorDecision(BaseModel):
     action_type: str = Field(
-        description="Next node to route to: 'RAG_SEARCH' (for questions about catalog products, milk yield, fat %, ingredients, dosage), 'BOOKING_NODE' (for ordering/booking products or checking booking history/updates), 'QUERY_NODE' (for creating support tickets/callbacks or checking user support tickets), or 'NONE' (greetings, standard chit-chat, general topics)."
+        description="Next node to route to: 'RAG_SEARCH' (for questions about catalog products, milk yield, fat %, ingredients, dosage), 'BOOKING_NODE' (for ordering/booking products or checking booking history/updates), 'QUERY_NODE' (for creating support tickets/callbacks or checking user support tickets), 'DEEP_MEMORY' (when user asks about their past history, memory, previous purchases, or stored cattle/farmer profile facts), or 'NONE' (greetings, standard chit-chat, general topics)."
     )
     reasoning: str = Field(description="Reasoning for decision.")
 
@@ -47,12 +48,13 @@ Analyze the user's message and history to classify the next action:
 1. Product details/ingredients, dosage, animal species recommendation, milk fat yield -> action_type = "RAG_SEARCH" (routes to rag_agent)
 2. Place a product order/booking, check order/booking updates/history -> action_type = "BOOKING_NODE" (routes to booking_node)
 3. Create a support ticket/query/callback request, check existing support tickets -> action_type = "QUERY_NODE" (routes to query_node)
-4. Greetings, general chit-chat, or general sales discussion -> action_type = "NONE" (routes directly to sales agent)
+4. User asks about their past interactions, past memory, stored farmer/cattle profile, previous recommendations, or order history -> action_type = "DEEP_MEMORY" (routes to deep_memory_node)
+5. Greetings, general chit-chat, or general sales discussion -> action_type = "NONE" (routes directly to sales agent)
 """
 
 
 async def supervisor_router(state: SupervisorState) -> Dict[str, Any]:
-    """Decides if we route to RAG Sub-Agent, Booking Node, Query Node, or Supervisor Sales Agent."""
+    """Decides if we route to RAG Sub-Agent, Booking Node, Query Node, Deep Memory Node, or Supervisor Sales Agent."""
     messages = state.get("messages", [])
 
     try:
@@ -65,6 +67,8 @@ async def supervisor_router(state: SupervisorState) -> Dict[str, Any]:
             next_node = "booking_node"
         elif decision.action_type == "QUERY_NODE":
             next_node = "query_node"
+        elif decision.action_type == "DEEP_MEMORY":
+            next_node = "deep_memory_node"
         else:
             next_node = "supervisor_sales_agent"
 
@@ -335,19 +339,100 @@ async def run_query_read_agent(state: SupervisorState) -> Dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
-# 3. Supervisor Sales Agent Node (Streams Final Answer to User)
+# 3. Deep Memory Node (Retrieves Detailed Historical User Memory on Demand)
+# -----------------------------------------------------------------------------
+async def deep_memory_node(state: SupervisorState) -> Dict[str, Any]:
+    """
+    Deep Memory Node for retrieving historical facts, past user preferences,
+    and detailed memory stored in Pinecone (user_memory namespace) and PostgreSQL DB.
+    Invoked when supervisor/router detects user asking about past history or profile details.
+    """
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "guest_user")
+    
+    last_user_query = ""
+    for msg in reversed(messages):
+        if hasattr(msg, "type") and msg.type == "human":
+            last_user_query = msg.content
+            break
+        elif isinstance(msg, dict) and msg.get("role") == "user":
+            last_user_query = msg.get("content", "")
+            break
+            
+    if not last_user_query:
+        last_user_query = "user memory profile and cattle history"
+        
+    logger.info(f"[DEEP MEMORY NODE] Fetching deep memory context for user '{user_id}' query: '{last_user_query}'")
+
+    relevant_snippets = []
+    # 1. Semantic Search on Pinecone user_memory namespace
+    try:
+        matches = await retrieval_service.retrieve_parallel(
+            queries=[last_user_query],
+            top_k=5,
+            namespace="user_memory",
+            user_id=user_id,
+            original_query=last_user_query
+        )
+        for match in matches:
+            text = match.get("metadata", {}).get("text") or match.get("metadata", {}).get("content")
+            if text and text not in relevant_snippets:
+                relevant_snippets.append(text)
+    except Exception as e:
+        logger.error(f"[DEEP MEMORY NODE] Pinecone retrieval error: {e}")
+
+    # 2. Fetch full DB memory record for complete facts coverage
+    all_facts = []
+    all_summaries = []
+    try:
+        db_record = db_service.execute_query(
+            "SELECT semantic_facts, episodic_summaries FROM user_memory WHERE user_id = %s",
+            (user_id,)
+        )
+        if db_record:
+            all_facts = db_record[0].get("semantic_facts") or []
+            all_summaries = db_record[0].get("episodic_summaries") or []
+    except Exception as dbe:
+        logger.error(f"[DEEP MEMORY NODE] DB retrieval error: {dbe}")
+
+    existing_facts = list(state.get("internal_facts") or [])
+    payload = {
+        "subagent": "deep_memory_node",
+        "user_id": user_id,
+        "query": last_user_query,
+        "relevant_facts": relevant_snippets,
+        "all_facts": all_facts,
+        "summaries": all_summaries
+    }
+    existing_facts.append(payload)
+
+    return {
+        "internal_facts": existing_facts,
+        "next": "supervisor_sales_agent"
+    }
+
+
+# -----------------------------------------------------------------------------
+# 4. Supervisor Sales Agent Node (Streams Final Answer to User)
 # -----------------------------------------------------------------------------
 SALES_PROMPT = """
-You are Vrsa Agrotech's Lead Sales Expert.
-Catalog: Horsa-550X-Turbo, TrioSan Gold, MaxaPro-DS Dairy, MaxaPro Liquid, Buffalo-Power 2X, Buffalo-F 1.5X.
+You are VRSA AGROTECH's Lead Animal Nutrition & Product Sales Specialist.
+You speak with absolute human intelligence, warmth, authority, and deep domain expertise in dairy science, livestock health, and animal nutrition supplements.
 
-MANDATE:
-1. ALWAYS RESPOND IN ENGLISH.
-2. Be an enthusiastic, expert sales agent. Make users confident to buy Vrsa Agrotech animal nutrition products.
-3. Use the facts and tool outputs in messages history to provide a clear, final answer to the user.
-4. Do NOT ask for village name, phone number, or other delivery details unless explicitly required by the tool or if you need to coordinate. (Keep the response focused and check if the tool result indicates a successful transaction/ticket).
-5. If a tool was executed successfully, summarize the order or ticket details clearly (e.g. Booking ID, Ticket ID) and thank them.
-6. If a tool was cancelled, inform them politely.
+CATALOG SUMMARY:
+- Horsa-550X-Turbo: Ultra-potency performance & milk yield booster (chelated trace minerals, bypass protein, vitamins A/D3/E, probiotics).
+- TrioSan Gold: Triple-action fat & SNF booster (calcium salts of bypass fats, liver stimulants; boosts fat up to 1.5%+).
+- MaxaPro-DS Dairy: Comprehensive double-strength daily nutrition & digestive supplement for cows/buffaloes.
+- MaxaPro Liquid: Fast-acting liquid mineral/vitamin suspension for post-calving recovery & appetite.
+- Buffalo-Power 2X: Specialized double-power supplement for Murrah & indigenous buffalo fat & yield.
+- Buffalo-F 1.5X: Target fat-enrichment formula (1.5X power) for buffalo milk density & fat %.
+
+MANDATE & GROUNDING RULES:
+--> Always ground product facts and recommendations using facts retrieved by the rag_agent sub-agent and catalog knowledge (use only when required for grounded results)
+--> Always leverage user history retrieved by the deep_memory_node whenever deeper context is needed to deliver a personalized response.
+1. Grounded & Adequate Facts: ALWAYS ground product claims, ingredients, dosages (e.g. 50g-100g daily in feed), micro-nutrients (chelated minerals, bypass fats, vitamins, probiotics), and species benefits directly in RAG retrieved facts and catalog knowledge. Provide precise, fully adequate, grounded information.
+2. Sales & Booking CTA: Recommend the optimal product based on farmer needs (low yield, low fat %, post-calving). Explain financial ROI (higher milk yield/fat = higher daily payout) and naturally invite them to book the order right away.
+3. Integration: Seamlessly synthesize RAG retrieved facts, Deep Memory facts, and Tool execution results into a warm, professional response in English.
 """
 
 
@@ -359,27 +444,40 @@ async def supervisor_sales_agent(state: SupervisorState) -> Dict[str, Any]:
 
     system_content = SALES_PROMPT
 
-    # Inject user memory context (core memory)
+    # Inject user core memory context (recent facts + latest summary)
     memory_str = ""
     semantic_facts = user_profile.get("semantic_facts", [])
     if semantic_facts:
-        memory_str += "\n[Farmer Profile Facts (Long Term)]:\n" + "\n".join([f"- {f}" for f in semantic_facts])
+        memory_str += "\n[Recent Core Farmer Profile Facts]:\n" + "\n".join([f"- {f}" for f in semantic_facts])
     
     episodic_summaries = user_profile.get("episodic_summaries", [])
     if episodic_summaries:
-        # Get the latest episodic summary to keep context concise but relevant
-        memory_str += f"\n[Latest Past Interaction Summary]:\n- {episodic_summaries[-1]}"
+        memory_str += f"\n[Latest Interaction Summary]:\n- {episodic_summaries[-1]}"
         
     if memory_str:
-        system_content += f"\n\n--- FARMER MEMORY PROFILE ---\n{memory_str}"
+        system_content += f"\n\n--- SLIM CORE MEMORY CONTEXT ---\n{memory_str}"
 
     if facts:
         facts_str = ""
         for item in facts:
             if "reranked_chunks" in item:
                 facts_str += "\n[RAG Retrieved Product Facts]:\n" + "\n".join([f"- {c}" for c in item["reranked_chunks"]])
+            elif item.get("subagent") == "deep_memory_node":
+                facts_str += "\n[Deep Historical Memory Retrieved]:\n"
+                rel = item.get("relevant_facts", [])
+                if rel:
+                    facts_str += "Relevant Vector Memory:\n" + "\n".join([f"- {r}" for r in rel]) + "\n"
+                all_f = item.get("all_facts", [])
+                if all_f:
+                    facts_str += "All Stored Profile Facts:\n" + "\n".join([f"- {f}" for f in all_f]) + "\n"
+                sums = item.get("summaries", [])
+                if sums:
+                    facts_str += "Past Summaries:\n" + "\n".join([f"- {s}" for s in sums]) + "\n"
             elif "tool" in item:
                 facts_str += f"\n[Sub-Agent Tool Result ({item.get('subagent')})]: {json.dumps(item)}"
+            else:
+                facts_str += f"\n[Sub-Agent Fact ({item.get('subagent')})]: {json.dumps(item)}"
+
         if facts_str:
             system_content += f"\n\n--- INTERNAL DATA FACTS ---\n{facts_str}"
 
@@ -399,6 +497,7 @@ workflow.add_node("booking_read_agent", run_booking_read_agent)
 workflow.add_node("query_node", query_node)
 workflow.add_node("query_agent", run_query_agent)
 workflow.add_node("query_read_agent", run_query_read_agent)
+workflow.add_node("deep_memory_node", deep_memory_node)
 workflow.add_node("supervisor_sales_agent", supervisor_sales_agent)
 
 workflow.set_entry_point("supervisor_router")
@@ -412,6 +511,7 @@ workflow.add_conditional_edges("supervisor_router", route_next, {
     "rag_agent": "rag_agent",
     "booking_node": "booking_node",
     "query_node": "query_node",
+    "deep_memory_node": "deep_memory_node",
     "supervisor_sales_agent": "supervisor_sales_agent"
 })
 
@@ -432,6 +532,7 @@ workflow.add_edge("booking_agent", "supervisor_sales_agent")
 workflow.add_edge("booking_read_agent", "supervisor_sales_agent")
 workflow.add_edge("query_agent", "supervisor_sales_agent")
 workflow.add_edge("query_read_agent", "supervisor_sales_agent")
+workflow.add_edge("deep_memory_node", "supervisor_sales_agent")
 workflow.add_edge("supervisor_sales_agent", END)
 
 from langgraph.checkpoint.memory import MemorySaver

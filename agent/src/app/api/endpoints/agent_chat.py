@@ -71,6 +71,28 @@ def save_assistant_message(thread_id: str, content: str):
     except Exception as e:
         logger.error(f"Error saving assistant message: {e}")
 
+def get_slim_user_profile(user_id: str) -> dict:
+    """
+    Fetches a slim, lightweight core memory context (max 3 recent facts, 1 recent summary)
+    to keep context small and fast without fetching heavy memory every message turn.
+    """
+    try:
+        memory_row = db_service.execute_query(
+            "SELECT semantic_facts, episodic_summaries FROM user_memory WHERE user_id = %s",
+            (user_id,)
+        )
+        if memory_row:
+            facts = memory_row[0].get("semantic_facts") or []
+            summaries = memory_row[0].get("episodic_summaries") or []
+            return {
+                "semantic_facts": facts[-3:] if facts else [],
+                "episodic_summaries": summaries[-1:] if summaries else []
+            }
+    except Exception as me:
+        logger.error(f"Error loading user profile memory: {me}")
+    return {"semantic_facts": [], "episodic_summaries": []}
+
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -110,10 +132,9 @@ def get_langfuse_callback():
     """
     lf_public = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('"')
     lf_secret = os.getenv("LANGFUSE_SECRET_KEY", "").strip('"')
-    lf_host = os.getenv("LANGFUSE_BASE_URL", "").strip('"')
     if lf_public and lf_secret:
         try:
-            return CallbackHandler(public_key=lf_public)
+            return CallbackHandler()
         except Exception as e:
             logger.error(f"Failed to initialize Langfuse callback handler: {e}")
     return None
@@ -123,6 +144,10 @@ async def chat_endpoint(req: ChatRequest):
     config = {
         "configurable": {
             "thread_id": req.thread_id
+        },
+        "metadata": {
+            "langfuse_session_id": req.thread_id,
+            "langfuse_user_id": req.user_id
         }
     }
     
@@ -161,20 +186,8 @@ async def chat_endpoint(req: ChatRequest):
                 
             save_user_message(req.thread_id, req.user_id, req.message)
             
-            # Fetch user memory profile from DB
-            user_profile = {"semantic_facts": [], "episodic_summaries": []}
-            try:
-                memory_row = db_service.execute_query(
-                    "SELECT semantic_facts, episodic_summaries FROM user_memory WHERE user_id = %s",
-                    (req.user_id,)
-                )
-                if memory_row:
-                    user_profile = {
-                        "semantic_facts": memory_row[0].get("semantic_facts") or [],
-                        "episodic_summaries": memory_row[0].get("episodic_summaries") or []
-                    }
-            except Exception as me:
-                logger.error(f"Error loading user profile memory: {me}")
+            # Fetch slim, lightweight user core memory context
+            user_profile = get_slim_user_profile(req.user_id)
 
             initial_state = {
                 "messages": [HumanMessage(content=req.message)],
@@ -231,6 +244,10 @@ async def chat_stream_endpoint(req: ChatRequest):
     config = {
         "configurable": {
             "thread_id": req.thread_id
+        },
+        "metadata": {
+            "langfuse_session_id": req.thread_id,
+            "langfuse_user_id": req.user_id
         }
     }
     
@@ -296,20 +313,8 @@ async def chat_stream_endpoint(req: ChatRequest):
                     
                 save_user_message(req.thread_id, req.user_id, req.message)
                 
-                # Fetch user memory profile from DB
-                user_profile = {"semantic_facts": [], "episodic_summaries": []}
-                try:
-                    memory_row = db_service.execute_query(
-                        "SELECT semantic_facts, episodic_summaries FROM user_memory WHERE user_id = %s",
-                        (req.user_id,)
-                    )
-                    if memory_row:
-                        user_profile = {
-                            "semantic_facts": memory_row[0].get("semantic_facts") or [],
-                            "episodic_summaries": memory_row[0].get("episodic_summaries") or []
-                        }
-                except Exception as me:
-                    logger.error(f"Error loading user profile memory: {me}")
+                # Fetch slim, lightweight user core memory context
+                user_profile = get_slim_user_profile(req.user_id)
 
                 initial_state = {
                     "messages": [HumanMessage(content=req.message)],
