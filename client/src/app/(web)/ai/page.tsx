@@ -20,7 +20,7 @@ import {
   Vegan,
 } from "lucide-react";
 import type * as React from "react";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -101,6 +101,110 @@ function AiPageContent() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
+
+  // Voice STT Recording States
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const handleMicClick = async () => {
+    if (isTranscribing) return;
+
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("Microphone access is not supported in your browser.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : undefined,
+      });
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+
+        if (audioChunksRef.current.length === 0) {
+          toast.error("No audio recorded.");
+          return;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: mediaRecorder.mimeType || "audio/webm",
+        });
+
+        setIsTranscribing(true);
+        const toastId = toast.loading(
+          lang === "en"
+            ? "Transcribing & translating your voice to English..."
+            : "ਤੁਹਾਡੀ ਆਵਾਜ਼ ਨੂੰ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ..."
+        );
+
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "audio.webm");
+
+          const res = await fetch("/api/stt", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || "Speech transcription failed.");
+          }
+
+          if (data.text) {
+            console.log("🎤 Transcribed text output:", data.text);
+            setInput((prev) => (prev ? `${prev} ${data.text}` : data.text));
+            toast.success(
+              lang === "en"
+                ? "Converted to English!"
+                : "ਆਵਾਜ਼ ਸਫਲਤਾਪੂਰਵਕ ਅੰਗਰੇਜ਼ੀ 'ਚ ਤਬਦੀਲ ਹੋ ਗਈ!",
+              { id: toastId }
+            );
+          } else {
+            toast.error("Could not recognize any spoken text.", { id: toastId });
+          }
+        } catch (err: any) {
+          console.error("STT Error:", err);
+          toast.error(err.message || "Failed to transcribe audio.", { id: toastId });
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      toast.info(
+        lang === "en"
+          ? "Listening... Speak in Punjabi, Hindi or English. Click mic again to finish."
+          : "ਸੁਣ ਰਿਹਾ ਹੈ... ਪੰਜਾਬੀ, ਹਿੰਦੀ ਜਾਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬੋਲੋ। ਪੂਰਾ ਹੋਣ 'ਤੇ ਮਾਈਕ 'ਤੇ ਕਲਿੱਕ ਕਰੋ।"
+      );
+    } catch (err) {
+      console.error("Microphone access error:", err);
+      toast.error("Microphone permission denied or unavailable.");
+    }
+  };
 
   const [threadId, setThreadId] = useState<string>(() => {
     return (
@@ -737,11 +841,33 @@ function AiPageContent() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
-                  disabled={isLoading || !!pendingApproval}
-                  title="Voice input (decorative)"
+                  onClick={handleMicClick}
+                  className={`h-8 w-8 rounded-xl transition-all cursor-pointer shrink-0 relative ${
+                    isRecording
+                      ? "bg-red-100 text-red-600 hover:bg-red-200 border border-red-300"
+                      : isTranscribing
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5"
+                  }`}
+                  disabled={isLoading || !!pendingApproval || isTranscribing}
+                  title={
+                    isRecording
+                      ? "Click to stop & transcribe"
+                      : isTranscribing
+                      ? "Transcribing voice..."
+                      : "Voice input (Speak in Punjabi / Hindi / English)"
+                  }
                 >
-                  <Mic className="w-4 h-4" />
+                  {isTranscribing ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
+                  ) : isRecording ? (
+                    <span className="relative flex items-center justify-center">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <Mic className="w-4 h-4 text-red-600 relative z-10" />
+                    </span>
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
 
