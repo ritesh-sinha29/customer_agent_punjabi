@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import Image from "next/image";
 
 const API_BASE = "http://localhost:8000/api";
 
@@ -68,7 +69,9 @@ interface EvalRunDetails extends EvalRun {
 export function EvaluationDashboard() {
   const [runs, setRuns] = useState<EvalRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<EvalRunDetails | null>(null);
-  const [activeModalItem, setActiveModalItem] = useState<EvalResultItem | null>(null);
+  const [activeModalItem, setActiveModalItem] = useState<EvalResultItem | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [runningSuite, setRunningSuite] = useState(false);
 
@@ -115,7 +118,8 @@ export function EvaluationDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          suite_name: count === 2 ? "Quick Benchmark (2 Samples)" : "Full Benchmark",
+          suite_name:
+            count === 2 ? "Quick Benchmark (2 Samples)" : "Full Benchmark",
           sample_count: count,
         }),
       });
@@ -171,61 +175,77 @@ export function EvaluationDashboard() {
   const latestRun = selectedRun || (runs.length > 0 ? runs[0] : null);
 
   return (
-    <div className="p-8 space-y-8 bg-[#FAFBF9] min-h-screen text-[#2E3A2F]">
+    <div className="p-2 space-y-8 bg-white min-h-screen ">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-[#2E3A2F]">
-              RAG & Agent Evaluation
-            </h1>
-            <Badge className="bg-[#5F7560] text-white text-xs font-semibold px-2 py-0.5">
-              No Blind Trust Engine
-            </Badge>
+      <div className="flex justify-between border rounded-md py-6 px-4 bg-linear-to-br from-emerald-600/40 to-white relative min-h-[190px]">
+        <div className="flex flex-col">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-semibold tracking-tight ">
+                RAG & Agent Evaluation
+              </h1>
+              <Badge className="bg-[#5F7560] text-white text-xs font-semibold px-2 py-0.5">
+                No Blind Trust Engine
+              </Badge>
+            </div>
+            <p className="text-sm mt-2">
+              Rag & Agent Benchmarking: Use RAGAS / LLM Judge For Evaluation/
+              Golden dataset for Evaluation.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Token-efficient benchmarking: Run 2-sample quick tests or evaluate custom admin queries in background.
-          </p>
+
+          <div className="flex items-center gap-3 mt-5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchRuns}
+              disabled={loading}
+              className="border-border rounded-sm"
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </Button>
+
+            {/* Token Saver Quick 2-Sample Run */}
+            <Button
+              size="sm"
+              onClick={() => handleTriggerQuickRun(2)}
+              disabled={runningSuite}
+              className="rounded-sm text-xs"
+            >
+              {runningSuite ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Evaluating...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2 text-amber-300 fill-amber-300" />
+                  Quick Test (Random sample)
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchRuns}
-            disabled={loading}
-            className="border-border hover:bg-muted"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-
-          {/* Token Saver Quick 2-Sample Run */}
-          <Button
-            size="sm"
-            onClick={() => handleTriggerQuickRun(2)}
-            disabled={runningSuite}
-            className="bg-[#2E3A2F] hover:bg-[#5F7560] text-white font-semibold shadow-md transition-all"
-          >
-            {runningSuite ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Evaluating...
-              </>
-            ) : (
-              <>
-                <Zap className="h-4 w-4 mr-2 text-amber-300 fill-amber-300" />
-                Quick Test (2 Samples)
-              </>
-            )}
-          </Button>
-        </div>
+        <Image
+          src="/evals.svg"
+          alt="home"
+          width={170}
+          height={170}
+          className="absolute -top-5 right-0"
+        />
       </div>
 
       {/* Admin Custom Test Question Bar */}
       <Card className="border border-[#5F7560]/30 bg-gradient-to-r from-emerald-50/40 via-white to-amber-50/30 shadow-xs">
         <CardContent className="p-4 sm:p-6">
-          <form onSubmit={handleRunCustomQuery} className="flex flex-col md:flex-row items-center gap-4">
+          <form
+            onSubmit={handleRunCustomQuery}
+            className="flex flex-col md:flex-row items-center gap-4"
+          >
             <div className="flex-1 w-full space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-[#2E3A2F] flex items-center gap-1.5">
                 <PlusCircle className="h-4 w-4 text-[#5F7560]" />
@@ -351,9 +371,13 @@ export function EvaluationDashboard() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               {latestRun && latestRun.hallucination_rate > 0 ? (
-                <span className="text-rose-500 font-medium">Warning: Unsupported claims detected</span>
+                <span className="text-rose-500 font-medium">
+                  Warning: Unsupported claims detected
+                </span>
               ) : (
-                <span className="text-emerald-600 font-medium">0% Hallucinations detected</span>
+                <span className="text-emerald-600 font-medium">
+                  0% Hallucinations detected
+                </span>
               )}
             </p>
           </CardContent>
@@ -389,7 +413,9 @@ export function EvaluationDashboard() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-[#2E3A2F]">{r.id}</span>
+                      <span className="font-bold text-sm text-[#2E3A2F]">
+                        {r.id}
+                      </span>
                       <Badge
                         variant="outline"
                         className={
@@ -403,16 +429,24 @@ export function EvaluationDashboard() {
                     </div>
 
                     <div className="mt-2 text-xs text-muted-foreground flex justify-between">
-                      <span className="truncate max-w-[180px]">{r.suite_name}</span>
+                      <span className="truncate max-w-[180px]">
+                        {r.suite_name}
+                      </span>
                       <span>{r.total_cases} case(s)</span>
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold pt-2 border-t border-border/50">
                       <div>
-                        Faithful: <span className="text-emerald-600">{r.faithfulness_avg}%</span>
+                        Faithful:{" "}
+                        <span className="text-emerald-600">
+                          {r.faithfulness_avg}%
+                        </span>
                       </div>
                       <div>
-                        Router: <span className="text-blue-600">{r.router_accuracy_avg}%</span>
+                        Router:{" "}
+                        <span className="text-blue-600">
+                          {r.router_accuracy_avg}%
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -427,7 +461,8 @@ export function EvaluationDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base font-bold text-[#2E3A2F] flex items-center gap-2">
               <Eye className="h-4 w-4 text-[#5F7560]" />
-              Test Case Evaluation Inspector ({selectedRun?.results?.length || 0} samples)
+              Test Case Evaluation Inspector (
+              {selectedRun?.results?.length || 0} samples)
             </CardTitle>
             {selectedRun && (
               <Badge variant="outline" className="text-xs">
@@ -436,9 +471,12 @@ export function EvaluationDashboard() {
             )}
           </CardHeader>
           <CardContent>
-            {!selectedRun || !selectedRun.results || selectedRun.results.length === 0 ? (
+            {!selectedRun ||
+            !selectedRun.results ||
+            selectedRun.results.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground text-sm">
-                Select a run or execute a benchmark to view detailed test case results.
+                Select a run or execute a benchmark to view detailed test case
+                results.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -457,7 +495,10 @@ export function EvaluationDashboard() {
                     {selectedRun.results.map((item) => {
                       const isHallucinated = item.hallucination_flag;
                       return (
-                        <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                        <tr
+                          key={item.id}
+                          className="hover:bg-muted/20 transition-colors"
+                        >
                           <td className="py-3 px-3 font-semibold text-xs text-[#5F7560]">
                             {item.category}
                           </td>
@@ -465,7 +506,10 @@ export function EvaluationDashboard() {
                             {item.query}
                           </td>
                           <td className="py-3 px-3">
-                            <Badge variant="secondary" className="text-[10px] font-mono">
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-mono"
+                            >
                               {item.actual_route}
                             </Badge>
                           </td>
@@ -514,7 +558,10 @@ export function EvaluationDashboard() {
       </div>
 
       {/* Side-by-Side Test Case Deep-Dive Modal */}
-      <Dialog open={!!activeModalItem} onOpenChange={() => setActiveModalItem(null)}>
+      <Dialog
+        open={!!activeModalItem}
+        onOpenChange={() => setActiveModalItem(null)}
+      >
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-white p-6 rounded-2xl">
           {activeModalItem && (
             <div className="space-y-6">
@@ -531,7 +578,9 @@ export function EvaluationDashboard() {
                         : "bg-emerald-100 text-emerald-700 border-emerald-200"
                     }
                   >
-                    {activeModalItem.hallucination_flag ? "Hallucination Alert" : "Faithful Grounded"}
+                    {activeModalItem.hallucination_flag
+                      ? "Hallucination Alert"
+                      : "Faithful Grounded"}
                   </Badge>
                 </div>
               </DialogHeader>
@@ -559,19 +608,25 @@ export function EvaluationDashboard() {
               {/* Score Badges Summary */}
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="p-3 bg-white border rounded-xl shadow-xs">
-                  <div className="text-xs text-muted-foreground">Faithfulness Score</div>
+                  <div className="text-xs text-muted-foreground">
+                    Faithfulness Score
+                  </div>
                   <div className="text-xl font-extrabold text-emerald-600 mt-1">
                     {activeModalItem.faithfulness_score}%
                   </div>
                 </div>
                 <div className="p-3 bg-white border rounded-xl shadow-xs">
-                  <div className="text-xs text-muted-foreground">Answer Relevancy</div>
+                  <div className="text-xs text-muted-foreground">
+                    Answer Relevancy
+                  </div>
                   <div className="text-xl font-extrabold text-blue-600 mt-1">
                     {activeModalItem.relevance_score}%
                   </div>
                 </div>
                 <div className="p-3 bg-white border rounded-xl shadow-xs">
-                  <div className="text-xs text-muted-foreground">Routing Check</div>
+                  <div className="text-xs text-muted-foreground">
+                    Routing Check
+                  </div>
                   <div className="text-xs font-bold text-[#2E3A2F] mt-1 font-mono">
                     Expected: {activeModalItem.expected_route} <br />
                     Actual: {activeModalItem.actual_route}
@@ -589,8 +644,14 @@ export function EvaluationDashboard() {
                   </h4>
                   <div className="p-4 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono max-h-60 overflow-y-auto space-y-2">
                     {activeModalItem.retrieved_contexts.map((chunk, idx) => (
-                      <div key={idx} className="pb-2 border-b border-slate-800 last:border-none">
-                        <span className="text-amber-400 font-bold">[Chunk {idx + 1}]</span>: {chunk}
+                      <div
+                        key={idx}
+                        className="pb-2 border-b border-slate-800 last:border-none"
+                      >
+                        <span className="text-amber-400 font-bold">
+                          [Chunk {idx + 1}]
+                        </span>
+                        : {chunk}
                       </div>
                     ))}
                   </div>
