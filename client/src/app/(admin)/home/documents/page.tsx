@@ -12,8 +12,10 @@ import {
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
 // UI Components from local library
 import {
@@ -32,7 +34,7 @@ interface CompletedDoc {
   file_name: string;
   file_size: number;
   uploaded_at: string;
-  tenant: string;
+  tenant?: string;
   wasabi_file_key?: string;
 }
 
@@ -48,10 +50,31 @@ interface ActiveIngestion {
   history?: string[];
 }
 
-const BACKEND_URL = "http://localhost:8000";
+// Backend URL environment variable with fallback
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+const fetchDocuments = async (): Promise<CompletedDoc[]> => {
+  const response = await fetch("/api/documents", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to load documents");
+  }
+  const data = await response.json();
+  if (data.success && data.documents) {
+    return data.documents;
+  }
+  return [];
+};
 
 export default function DocumentsPage() {
-  const [completedDocs, setCompletedDocs] = useState<CompletedDoc[]>([]);
+  const queryClient = useQueryClient();
+
+  // TanStack Query for fetching completed documents
+  const { data: completedDocs = [], isLoading } = useQuery({
+    queryKey: ["documents"],
+    queryFn: fetchDocuments,
+  });
+
   const [activeIngestions, setActiveIngestions] = useState<
     Record<string, ActiveIngestion>
   >({});
@@ -62,24 +85,8 @@ export default function DocumentsPage() {
   // Track open SSE connections to prevent leaks
   const sseConnections = useRef<Record<string, EventSource>>({});
 
-  // 1. Load completed documents from Database API on mount
+  // Recover active ingestions from SessionStorage on mount
   useEffect(() => {
-    const fetchDocs = async () => {
-      try {
-        const response = await fetch("/api/documents");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            setCompletedDocs(data.documents);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load documents from database", err);
-      }
-    };
-    fetchDocs();
-
-    // Recover active ingestions from SessionStorage if user refreshed page
     const recoveredActive = sessionStorage.getItem("punjabi_active_ingestions");
     if (recoveredActive) {
       try {
@@ -103,7 +110,7 @@ export default function DocumentsPage() {
     };
   }, []);
 
-  // 1.5. Real-time timer and local timeout effect for active ingestions
+  // Real-time timer and local timeout effect for active ingestions
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveIngestions((prev) => {
@@ -162,18 +169,23 @@ export default function DocumentsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Sync active ingestions to session storage
-  const saveActiveIngestions = (
-    ingestions: Record<string, ActiveIngestion>,
-  ) => {
-    sessionStorage.setItem(
-      "punjabi_active_ingestions",
-      JSON.stringify(ingestions),
-    );
-    setActiveIngestions(ingestions);
+  // Formats date cleanly: e.g. "Jul 19, 2026"
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "-";
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return dateString;
+      return d.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
   };
 
-  // 2. Map file types to public SVG icons
+  // Map file types to public SVG icons
   const getFileIcon = (fileName: string) => {
     const ext = fileName.split(".").pop()?.toLowerCase();
     if (ext === "pdf") return "/pdf.svg";
@@ -185,7 +197,7 @@ export default function DocumentsPage() {
 
   // Formats file sizes
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
+    if (!bytes || bytes === 0) return "0 Bytes";
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -205,7 +217,7 @@ export default function DocumentsPage() {
     );
   };
 
-  // 3. File selection validation (Max 25MB)
+  // File selection validation (Max 25MB)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -227,9 +239,8 @@ export default function DocumentsPage() {
     });
   };
 
-  // 4. Connect to SSE status stream on Python server
+  // Connect to SSE status stream on Python server
   const connectSSE = (jobId: string) => {
-    // Avoid double listeners
     if (sseConnections.current[jobId]) {
       sseConnections.current[jobId].close();
     }
@@ -244,7 +255,6 @@ export default function DocumentsPage() {
         const data = JSON.parse(event.data);
         const { status, current_step, step_message, file_name } = data;
 
-        // Update active ingestion step progress
         setActiveIngestions((prev) => {
           const updated = { ...prev };
           const newMsg = step_message || "Ingesting...";
@@ -263,7 +273,6 @@ export default function DocumentsPage() {
               history: updatedHistory,
             };
           } else {
-            // Fallback initialization if recovered
             updated[jobId] = {
               job_id: jobId,
               file_name: file_name || "Document",
@@ -277,7 +286,6 @@ export default function DocumentsPage() {
             };
           }
 
-          // Persist the state
           sessionStorage.setItem(
             "punjabi_active_ingestions",
             JSON.stringify(updated),
@@ -285,7 +293,6 @@ export default function DocumentsPage() {
           return updated;
         });
 
-        // If completed, move to completed lists
         if (status === "completed") {
           toast.success("Ingestion successful!", {
             description: `${file_name || "Document"} has been parsed, embedded, and stored in Pinecone.`,
@@ -294,7 +301,8 @@ export default function DocumentsPage() {
           eventSource.close();
           delete sseConnections.current[jobId];
 
-          // Remove from active list
+          queryClient.invalidateQueries({ queryKey: ["documents"] });
+
           setActiveIngestions((prev) => {
             const updated = { ...prev };
             delete updated[jobId];
@@ -306,7 +314,6 @@ export default function DocumentsPage() {
           });
         }
 
-        // If failed
         if (status === "failed") {
           toast.error("Ingestion failed", {
             description: `${file_name || "Document"} processing failed: ${step_message}`,
@@ -314,7 +321,6 @@ export default function DocumentsPage() {
           eventSource.close();
           delete sseConnections.current[jobId];
 
-          // Remove from active list after 5s or keep it as error card
           setActiveIngestions((prev) => {
             const updated = { ...prev };
             if (updated[jobId]) {
@@ -335,7 +341,6 @@ export default function DocumentsPage() {
 
     eventSource.onerror = (err) => {
       console.error("SSE connection error", err);
-      // Close the connection
       eventSource.close();
       delete sseConnections.current[jobId];
 
@@ -351,7 +356,7 @@ export default function DocumentsPage() {
     };
   };
 
-  // 5. Upload to Wasabi and invoke Python Ingestion API
+  // Upload to Wasabi and invoke Python Ingestion API
   const handleConfirmUpload = async () => {
     if (!selectedFile) return;
 
@@ -359,15 +364,9 @@ export default function DocumentsPage() {
     setUploadProgress(10);
 
     try {
-      console.log(
-        `%c[Wasabi Upload] Initiating upload for file: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`,
-        "color: #0070f3; font-weight: bold;",
-      );
-
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      // Simulate a progress bar during actual upload
       const uploadSim = setInterval(() => {
         setUploadProgress((prev) => {
           if (prev >= 90) {
@@ -389,20 +388,10 @@ export default function DocumentsPage() {
         const errorData = await uploadResponse.json().catch(() => ({}));
         const errorMsg =
           errorData.error || `HTTP error ${uploadResponse.status}`;
-        console.error(
-          `%c[Wasabi Upload] FAILED: ${errorMsg}`,
-          "color: #ff0000; font-weight: bold;",
-        );
         throw new Error(errorMsg);
       }
 
       const uploadResult = await uploadResponse.json();
-      console.log(
-        `%c[Wasabi Upload] SUCCESS! File uploaded to Wasabi and saved in DB. Details:`,
-        "color: #00aa00; font-weight: bold;",
-        uploadResult,
-      );
-
       setUploadProgress(100);
 
       const actualFileUrl = uploadResult.data.url;
@@ -410,34 +399,16 @@ export default function DocumentsPage() {
       const actualFileId = uploadResult.data.id;
       const actualFileName = uploadResult.data.name;
       const actualFileSize = uploadResult.data.size;
-      const actualUploadedAt = uploadResult.data.uploadedAt;
 
-      // Close Dialog
       setIsDialogOpen(false);
-
-      // Reset upload states
       setSelectedFile(null);
       setIsUploading(false);
       setUploadProgress(0);
 
-      // Immediately add the new upload metadata to completed docs list so it is displayed instantly on the UI
-      setCompletedDocs((prev) => {
-        const newDoc: CompletedDoc = {
-          doc_id: actualFileId,
-          file_name: actualFileName,
-          file_size: actualFileSize,
-          uploaded_at: new Date(actualUploadedAt).toLocaleString(),
-          tenant: "default",
-          wasabi_file_key: actualFileKey,
-        };
-        return [newDoc, ...prev];
-      });
+      // Refetch documents from database so all docs remain visible
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
 
-      console.log(
-        `[Ingestion] Triggering Python API ingestion workflow for key: ${actualFileKey} and ID: ${actualFileId}`,
-      );
-
-      // Trigger ingestion API endpoint (passing actualFileId as job_id)
+      // Trigger ingestion API endpoint
       const response = await fetch(`${BACKEND_URL}/api/v1/ingest`, {
         method: "POST",
         headers: {
@@ -462,7 +433,6 @@ export default function DocumentsPage() {
       const resData = await response.json();
       const jobId = resData.data.job_id;
 
-      // Add to active ingestions lists
       const now = Date.now();
       setActiveIngestions((prev) => {
         const updated = {
@@ -486,7 +456,6 @@ export default function DocumentsPage() {
         return updated;
       });
 
-      // Start SSE listener
       connectSSE(jobId);
     } catch (err: any) {
       toast.error("Upload failed", {
@@ -496,10 +465,9 @@ export default function DocumentsPage() {
     }
   };
 
-  // 6. Delete completed document from Pinecone, Wasabi S3, and PostgreSQL DB
-  const handleDeleteCompleted = async (docId: string, fileName: string) => {
-    try {
-      // Find the document to get its file key
+  // TanStack Query Mutation for deleting documents
+  const deleteMutation = useMutation({
+    mutationFn: async ({ docId, fileName }: { docId: string; fileName: string }) => {
       const doc = completedDocs.find((d) => d.doc_id === docId);
       const fileKey = doc?.wasabi_file_key;
 
@@ -513,7 +481,7 @@ export default function DocumentsPage() {
         throw new Error("Failed to delete document metadata from database.");
       }
 
-      // 2. Delete from Wasabi S3 (if file key is present)
+      // 2. Delete from Wasabi S3
       if (fileKey) {
         await fetch("/api/delete", {
           method: "DELETE",
@@ -533,19 +501,22 @@ export default function DocumentsPage() {
       if (!response.ok) {
         throw new Error("Failed to delete document vectors from Pinecone.");
       }
-
-      // Filter local state
-      setCompletedDocs((prev) => prev.filter((d) => d.doc_id !== docId));
-
+    },
+    onSuccess: (_, { docId, fileName }) => {
+      queryClient.setQueryData<CompletedDoc[]>(["documents"], (old = []) =>
+        old.filter((d) => d.doc_id !== docId),
+      );
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
       toast.success("Document deleted", {
         description: `${fileName} removed from database, Wasabi, and Pinecone.`,
       });
-    } catch (err: any) {
+    },
+    onError: (err: any) => {
       toast.error("Delete failed", {
         description: err.message || "Could not complete document deletion.",
       });
-    }
-  };
+    },
+  });
 
   const removeFailedIngestion = (jobId: string) => {
     setActiveIngestions((prev) => {
@@ -560,7 +531,7 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className=" space-y-6 bg-white">
+    <div className="space-y-6 bg-white">
       {/* Top Banner / Ingestion Portal Header */}
       <div className="w-[95%] mx-auto p-4 rounded-xl shadow-sm border bg-linear-to-br from-amber-800 to-yellow-50 relative h-[185px] mt-3">
         <div className="flex items-center justify-between h-full">
@@ -586,7 +557,6 @@ export default function DocumentsPage() {
                   </DialogHeader>
 
                   <div className="space-y-4 py-4">
-                    {/* Drag and drop card */}
                     <div className="border-2 border-dashed border-muted-foreground/30 hover:border-[#5F7560] rounded-lg p-8 text-center cursor-pointer transition relative">
                       <input
                         type="file"
@@ -603,7 +573,6 @@ export default function DocumentsPage() {
                       </p>
                     </div>
 
-                    {/* Selected File Details */}
                     {selectedFile && (
                       <div className="bg-muted/10 border border-border rounded-lg p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -632,7 +601,6 @@ export default function DocumentsPage() {
                       </div>
                     )}
 
-                    {/* Progress Bar */}
                     {isUploading && (
                       <div className="space-y-2">
                         <Progress
@@ -646,7 +614,6 @@ export default function DocumentsPage() {
                     )}
                   </div>
 
-                  {/* Actions */}
                   <div className="flex justify-end gap-3 mt-4 border-t pt-4">
                     <DialogClose asChild>
                       <Button variant="outline" disabled={isUploading}>
@@ -718,7 +685,6 @@ export default function DocumentsPage() {
                       </div>
                     </div>
 
-                    {/* Status Badge & Timer */}
                     <div className="flex flex-col items-end gap-1.5">
                       {job.status === "failed" ? (
                         <Badge
@@ -733,19 +699,14 @@ export default function DocumentsPage() {
                           <span> {job.elapsedTime || 0}s</span>
                         </Badge>
                       )}
-                      {/* <span className="text-[10px] font-mono text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded border">
-                        ⏱️ {job.elapsedTime || 0}s
-                      </span> */}
                     </div>
                   </div>
 
-                  {/* Progressive Step Message & SSE Log Viewer */}
                   <div className="space-y-2 bg-muted/5 p-3 rounded-lg border text-xs">
                     <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                       <span>Progress</span>
                       <span>Step {job.current_step}/6</span>
                     </div>
-                    {/* Linear loader representation */}
                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                       <div
                         className={`h-full transition-all duration-300 ${job.status === "failed" ? "bg-destructive" : "bg-[#5F7560]"}`}
@@ -753,7 +714,6 @@ export default function DocumentsPage() {
                       />
                     </div>
 
-                    {/* Event logs / history */}
                     <div className="mt-2 space-y-1 max-h-[85px] overflow-y-auto pt-1.5 border-t border-dashed border-border scrollbar-thin">
                       {(job.history || [job.step_message]).map((msg, idx) => (
                         <div
@@ -786,13 +746,52 @@ export default function DocumentsPage() {
         )}
 
         {/* Completed Uploaded Docs Section */}
-        <div className=" space-y-4">
+        <div className="space-y-4">
           <h2 className="text-md font-bold text-foreground flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-[#5F7560]" /> Uploaded
             Documents ({completedDocs.length})
           </h2>
 
-          {completedDocs.length === 0 ? (
+          {isLoading ? (
+            <div className="overflow-hidden border border-border rounded-lg">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border text-xs font-bold text-muted-foreground">
+                    <th className="p-4 w-8">Format</th>
+                    <th className="p-4">Name</th>
+                    <th className="p-4">Size</th>
+                    <th className="p-4">Ingestion</th>
+                    <th className="p-4">Uploaded At</th>
+                    <th className="p-4 w-12 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <tr key={i} className="border-b border-border">
+                      <td className="p-4">
+                        <Skeleton className="h-6 w-6 rounded-md" />
+                      </td>
+                      <td className="p-4">
+                        <Skeleton className="h-4 w-48" />
+                      </td>
+                      <td className="p-4">
+                        <Skeleton className="h-4 w-16" />
+                      </td>
+                      <td className="p-4">
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                      </td>
+                      <td className="p-4">
+                        <Skeleton className="h-4 w-24" />
+                      </td>
+                      <td className="p-4 text-center">
+                        <Skeleton className="h-8 w-8 rounded-md mx-auto" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : completedDocs.length === 0 ? (
             <div className="border border-dashed rounded-lg p-12 text-center text-muted-foreground">
               <FileText className="h-12 w-12 text-muted-foreground/45 mx-auto mb-2" />
               <p className="text-sm font-semibold">No documents uploaded yet</p>
@@ -808,6 +807,7 @@ export default function DocumentsPage() {
                     <th className="p-4 w-8">Format</th>
                     <th className="p-4">Name</th>
                     <th className="p-4">Size</th>
+                    <th className="p-4">Ingestion</th>
                     <th className="p-4">Uploaded At</th>
                     <th className="p-4 w-12 text-center">Action</th>
                   </tr>
@@ -833,19 +833,34 @@ export default function DocumentsPage() {
                           ? formatFileSize(doc.file_size)
                           : "2.4 MB (approx)"}
                       </td>
-                      <td className="p-4 text-xs text-muted-foreground">
-                        {doc.uploaded_at}
+                      <td className="p-4">
+                        <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-medium shadow-none hover:bg-emerald-50 flex items-center gap-1.5 w-fit">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          Success
+                        </Badge>
+                      </td>
+                      <td className="p-4 text-xs text-muted-foreground font-medium">
+                        {formatDate(doc.uploaded_at)}
                       </td>
                       <td className="p-4 text-center">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() =>
-                            handleDeleteCompleted(doc.doc_id, doc.file_name)
+                            deleteMutation.mutate({
+                              docId: doc.doc_id,
+                              fileName: doc.file_name,
+                            })
                           }
+                          disabled={deleteMutation.isPending}
                           className="text-destructive hover:bg-destructive/10"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {deleteMutation.isPending &&
+                          deleteMutation.variables?.docId === doc.doc_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
                       </td>
                     </tr>

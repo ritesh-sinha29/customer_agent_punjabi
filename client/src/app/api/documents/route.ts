@@ -71,12 +71,17 @@ export async function DELETE(request: NextRequest) {
       .limit(1);
 
     if (!existingDoc) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Document not found" },
+        { status: 404 },
+      );
     }
 
     // 4. Delete the document from PostgreSQL database
     await db.delete(document).where(eq(document.id, doc_id));
-    console.log(`[Database Delete] Successfully deleted document ${doc_id} from database.`);
+    console.log(
+      `[Database Delete] Successfully deleted document ${doc_id} from database.`,
+    );
 
     return NextResponse.json({
       success: true,
@@ -85,7 +90,9 @@ export async function DELETE(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Error deleting document from database:", error);
     const errorMessage =
-      error instanceof Error ? error.message : "Internal server error during document deletion";
+      error instanceof Error
+        ? error.message
+        : "Internal server error during document deletion";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
