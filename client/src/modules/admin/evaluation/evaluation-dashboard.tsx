@@ -177,14 +177,14 @@ export function EvaluationDashboard() {
   return (
     <div className="p-2 space-y-8 bg-white min-h-screen ">
       {/* Header */}
-      <div className="flex justify-between border rounded-md py-6 px-4 bg-linear-to-br from-emerald-600/40 to-white relative min-h-[190px]">
+      <div className="flex justify-between border rounded-md py-6 px-4 bg-linear-to-br from-blue-700/50 to-rose-100 relative min-h-[190px]">
         <div className="flex flex-col">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-semibold tracking-tight ">
                 RAG & Agent Evaluation
               </h1>
-              <Badge className="bg-[#5F7560] text-white text-xs font-semibold px-2 py-0.5">
+              <Badge className="bg-blue-100 text-neutral-600 text-xs font-semibold px-2 py-0.5">
                 No Blind Trust Engine
               </Badge>
             </div>
@@ -222,7 +222,7 @@ export function EvaluationDashboard() {
                 </>
               ) : (
                 <>
-                  <Zap className="h-4 w-4 mr-2 text-amber-300 fill-amber-300" />
+                  <ShieldCheck className="h-4 w-4 mr-2 " />
                   Quick Test (Random sample)
                 </>
               )}
@@ -235,39 +235,39 @@ export function EvaluationDashboard() {
           alt="home"
           width={170}
           height={170}
-          className="absolute -top-5 right-0"
+          className="absolute -top-5 right-5"
         />
       </div>
 
       {/* Admin Custom Test Question Bar */}
-      <Card className="border border-[#5F7560]/30 bg-gradient-to-r from-emerald-50/40 via-white to-amber-50/30 shadow-xs">
-        <CardContent className="p-4 sm:p-6">
+      <Card className="bg-neutral-50 rounded-md">
+        <CardContent className="p-5">
           <form
             onSubmit={handleRunCustomQuery}
             className="flex flex-col md:flex-row items-center gap-4"
           >
             <div className="flex-1 w-full space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-[#2E3A2F] flex items-center gap-1.5">
-                <PlusCircle className="h-4 w-4 text-[#5F7560]" />
-                Test Custom Admin Question (Single Background Job)
+              <label className="text-sm flex items-center gap-1.5">
+                <PlusCircle className="h-4 w-4 " />
+                Test Custom Admin Question{" "}
               </label>
               <Input
                 placeholder="e.g. What is the daily dosage of MaxaPro Liquid for buffaloes?"
                 value={customQuery}
                 onChange={(e) => setCustomQuery(e.target.value)}
-                className="bg-white border-border text-sm"
+                className=" border-border text-sm rounded-sm bg-white"
               />
             </div>
 
-            <div className="flex-1 w-full space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">
+            <div className="">
+              <label className="text-sm font-medium ">
                 Expected Ground Truth (Optional)
               </label>
               <Input
                 placeholder="e.g. 100ml per day mixed in feed."
                 value={customTruth}
                 onChange={(e) => setCustomTruth(e.target.value)}
-                className="bg-white border-border text-sm"
+                className="bg-white border-border text-sm rounded-sm"
               />
             </div>
 
@@ -275,7 +275,7 @@ export function EvaluationDashboard() {
               <Button
                 type="submit"
                 disabled={testingCustom || !customQuery.trim()}
-                className="w-full md:w-auto bg-[#5F7560] hover:bg-[#2E3A2F] text-white font-semibold text-xs h-10 px-5 shadow-xs"
+                className="w-full md:w-auto rounded-md text-sm"
               >
                 {testingCustom ? (
                   <>
@@ -296,12 +296,12 @@ export function EvaluationDashboard() {
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="border border-border/60 shadow-sm bg-white hover:shadow-md transition-shadow">
+        <Card className="rounded-lg  bg-neutral-50 ">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-semibold uppercase ">
               Faithfulness Index
             </CardTitle>
-            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+            <div className="p-2 bg-white rounded-sm border text-emerald-500">
               <ShieldCheck className="h-5 w-5" />
             </div>
           </CardHeader>
@@ -316,12 +316,12 @@ export function EvaluationDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/60 shadow-sm bg-white hover:shadow-md transition-shadow">
+        <Card className="rounded-lg  bg-neutral-50 ">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-semibold uppercase ">
               Answer Relevancy
             </CardTitle>
-            <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+            <div className="p-2 bg-white rounded-sm border text-blue-500">
               <Target className="h-5 w-5" />
             </div>
           </CardHeader>
@@ -336,12 +336,12 @@ export function EvaluationDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/60 shadow-sm bg-white hover:shadow-md transition-shadow">
+        <Card className="rounded-lg  bg-neutral-50 ">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-semibold uppercase ">
               Context Precision
             </CardTitle>
-            <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
+            <div className="p-2 bg-white rounded-sm border text-amber-500">
               <Search className="h-5 w-5" />
             </div>
           </CardHeader>
@@ -355,13 +355,12 @@ export function EvaluationDashboard() {
             </p>
           </CardContent>
         </Card>
-
-        <Card className="border border-border/60 shadow-sm bg-white hover:shadow-md transition-shadow">
+        <Card className="rounded-lg  bg-neutral-50 ">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-semibold uppercase ">
               Hallucination Rate
             </CardTitle>
-            <div className="p-2 bg-rose-50 rounded-lg text-rose-600">
+            <div className="p-2 bg-white rounded-sm border text-rose-500">
               <AlertTriangle className="h-5 w-5" />
             </div>
           </CardHeader>
@@ -387,7 +386,7 @@ export function EvaluationDashboard() {
       {/* Main Content Split */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Run Selector List (Left Column) */}
-        <Card className="border border-border/60 bg-white shadow-sm lg:col-span-1">
+        <Card className="rounded-lg bg-white  lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base font-bold text-[#2E3A2F] flex items-center gap-2">
               <Layers className="h-4 w-4 text-[#5F7560]" />
@@ -457,7 +456,7 @@ export function EvaluationDashboard() {
         </Card>
 
         {/* Detailed Test Case Inspector Table (Right 2 Columns) */}
-        <Card className="border border-border/60 bg-white shadow-sm lg:col-span-2">
+        <Card className="rounded-lg  bg-white   lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base font-bold text-[#2E3A2F] flex items-center gap-2">
               <Eye className="h-4 w-4 text-[#5F7560]" />
