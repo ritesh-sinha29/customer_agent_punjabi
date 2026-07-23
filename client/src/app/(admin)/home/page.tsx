@@ -62,19 +62,19 @@ function MetricCard({ title, value, icon }: MetricCardProps) {
 
 // Fetcher functions for TanStack Query
 const fetchDocuments = async (): Promise<DocumentItem[]> => {
-  const response = await fetch("/api/documents");
+  const response = await fetch("/api/documents", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to load documents");
   }
   const data = await response.json();
   if (data.success && data.documents) {
-    return data.documents.slice(0, 3);
+    return data.documents;
   }
   return [];
 };
 
 const fetchBookings = async (): Promise<BookingItem[]> => {
-  const response = await fetch("/api/bookings");
+  const response = await fetch("/api/bookings", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to load bookings");
   }
@@ -98,6 +98,9 @@ export default function AdminPage() {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
+
+  // Display only top 3 recent documents on Home page
+  const displayDocs = documents.slice(0, 3);
 
   // TanStack Query caching for bookings with 5 minutes staleTime
   const {
@@ -287,7 +290,7 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {documents.map((doc) => (
+            {displayDocs.map((doc) => (
               <div
                 key={doc.doc_id}
                 className="flex items-center gap-4 p-2.5 border border-border rounded-md bg-neutral-50 cursor-pointer hover:border-[#5F7560]/30 hover:shadow-xs transition-all"
