@@ -52,8 +52,9 @@ class RetrievalService:
         top_k: int = 5, 
         namespace: str = "default",
         user_id: str = "guest_user",
-        original_query: str = None
-    ) -> List[Dict[str, Any]]:
+        original_query: str = None,
+        return_vector: bool = False
+    ) -> Any:
         """
         Takes multiple search queries, generates dense + sparse embeddings in batch,
         queries Pinecone in parallel, de-duplicates and rerank chunks (using Jina v2
@@ -143,6 +144,9 @@ class RetrievalService:
             except Exception as le:
                 logger.error(f"Failed to end Langfuse span in retrieval: {le}")
 
+        primary_dense = dense_vectors[0] if (dense_vectors and len(dense_vectors) > 0) else None
+        if return_vector:
+            return final_results, primary_dense
         return final_results
 
 retrieval_service = RetrievalService()

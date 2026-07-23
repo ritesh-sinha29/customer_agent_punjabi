@@ -99,13 +99,15 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
     # STEP 5: Candidate Reranking via Jina Reranker v2 / RRF fusion (top 5 or fewer)
     # -------------------------------------------------------------------------
     reranked_chunks = []
+    rag_dense_vec = None
     try:
-        retrieved_matches = await retrieval_service.retrieve_parallel(
+        retrieved_matches, rag_dense_vec = await retrieval_service.retrieve_parallel(
             queries=expanded_queries,
             top_k=5,
             user_id=user_id,
             original_query=last_user_query,
-            namespace="default"
+            namespace="default",
+            return_vector=True
         )
         
         print(f"\n[RAG SUB-AGENT] STEP 5: TOP RERANKED CHUNKS RETURNED ({len(retrieved_matches)}):")
@@ -119,16 +121,6 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"[RAG Sub-Agent] Step 3-5 error: {e}")
-
-    # Capture dense vector embedding of last_user_query for zero-cost semantic cache reuse
-    rag_dense_vec = None
-    try:
-        from src.app.services.embedding_service import embedding_service
-        vecs = await embedding_service.get_dense_embeddings([last_user_query])
-        if vecs and vecs[0]:
-            rag_dense_vec = vecs[0]
-    except Exception as ee:
-        logger.error(f"Error capturing RAG dense vector for cache: {ee}")
 
     # -------------------------------------------------------------------------
     # STEP 6: Store clean payload in Supervisor State & route to supervisor_sales_agent
