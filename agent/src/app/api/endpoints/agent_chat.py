@@ -325,10 +325,48 @@ async def chat_stream_endpoint(req: ChatRequest):
     
     async def process_stream_events(stream_iterator):
         reasoning_sent = False
+        last_status = ""
+
         async for event in stream_iterator:
             kind = event.get("event")
             node_name = event.get("metadata", {}).get("langgraph_node", "")
-            
+            event_name = event.get("name", "")
+            target = node_name or event_name
+
+            # Emit real-time status updates as graph nodes & chains begin
+            if kind in ["on_chain_start", "on_node_start"]:
+                status_msg = None
+                if target == "supervisor_router":
+                    status_msg = "Analyzing query intent & checking workflow routing..."
+                elif target == "rag_agent":
+                    status_msg = "Generating contents and looking into company Knowledge Base..."
+                elif target in ["booking_node", "booking_agent", "booking_read_agent"]:
+                    status_msg = "Processing product booking & checking inventory..."
+                elif target in ["query_node", "query_agent", "query_read_agent"]:
+                    status_msg = "Processing support ticket & reviewing inquiries..."
+                elif target == "deep_memory_node":
+                    status_msg = "Consulting user memory & historical farmer facts..."
+                elif target == "supervisor_sales_agent":
+                    status_msg = "Consulting agricultural knowledge base & composing response..."
+
+                if status_msg and status_msg != last_status:
+                    last_status = status_msg
+                    yield f"data: {json.dumps({'type': 'status', 'content': status_msg})}\n\n"
+
+            if kind == "on_tool_start":
+                tool_name = event.get("name", "")
+                status_msg = None
+                if tool_name in ["run_rag_agent", "retrieval_service"]:
+                    status_msg = "Searching vector database & embedding documents..."
+                elif tool_name in ["create_booking", "get_booking_updates"]:
+                    status_msg = "Booking product & saving transaction record..."
+                elif tool_name in ["create_query", "get_user_queries"]:
+                    status_msg = "Submitting customer support ticket..."
+
+                if status_msg and status_msg != last_status:
+                    last_status = status_msg
+                    yield f"data: {json.dumps({'type': 'status', 'content': status_msg})}\n\n"
+
             if kind == "on_chat_model_stream":
                 if node_name == "supervisor_router":
                     continue
@@ -355,6 +393,8 @@ async def chat_stream_endpoint(req: ChatRequest):
             config["callbacks"] = [cb]
             
         try:
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Checking query & checking semantic cache...'})}\n\n"
+
             # 1. Fetch current state of the conversation thread
             state = await agent_graph.aget_state(config)
             
@@ -414,6 +454,7 @@ async def chat_stream_endpoint(req: ChatRequest):
                     "pending_action_details": None
                 }
                 
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing conversation & starting agent graph...'})}\n\n"
                 async for chunk in process_stream_events(agent_graph.astream_events(initial_state, config, version="v2")):
                     yield chunk
             

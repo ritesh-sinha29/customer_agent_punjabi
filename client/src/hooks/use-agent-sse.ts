@@ -7,6 +7,7 @@ export interface Message {
   content: string;
   timestamp: string;
   reasoning?: string;
+  statusText?: string;
   duration?: number;
   approvalCard?: PendingApproval;
   memoryUpdated?: boolean;
@@ -68,6 +69,7 @@ export function useAgentSSE(threadId: string, userId: string) {
           id: assistantMessageId,
           role: "assistant",
           content: "",
+          statusText: "Checking query & checking semantic cache...",
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -127,6 +129,14 @@ export function useAgentSSE(threadId: string, userId: string) {
                   prev.map((msg) =>
                     msg.id === assistantMessageId
                       ? { ...msg, content: accumulatedText, duration }
+                      : msg,
+                  ),
+                );
+              } else if (data.type === "status") {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, statusText: data.content }
                       : msg,
                   ),
                 );

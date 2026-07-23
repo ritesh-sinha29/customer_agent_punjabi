@@ -106,7 +106,12 @@ function AiPageContent() {
   const [translations, setTranslations] = useState<
     Record<
       string,
-      { text: string; loading: boolean; showTranslated: boolean; error?: boolean }
+      {
+        text: string;
+        loading: boolean;
+        showTranslated: boolean;
+        error?: boolean;
+      }
     >
   >({});
 
@@ -305,7 +310,9 @@ function AiPageContent() {
     try {
       await navigator.clipboard.writeText(content);
       toast.success(
-        isUser ? "Message copied to clipboard!" : "Response copied to clipboard!",
+        isUser
+          ? "Message copied to clipboard!"
+          : "Response copied to clipboard!",
       );
     } catch (err) {
       console.error("Failed to copy text: ", err);
@@ -388,7 +395,12 @@ function AiPageContent() {
       );
       setTranslations((prev) => ({
         ...prev,
-        [msgId]: { text: "", loading: false, showTranslated: false, error: true },
+        [msgId]: {
+          text: "",
+          loading: false,
+          showTranslated: false,
+          error: true,
+        },
       }));
     }
   };
@@ -650,9 +662,15 @@ function AiPageContent() {
                                         </div>
                                         <ChevronDown className="w-4 h-4 text-emerald-600 transition-transform duration-200 group-open:rotate-180" />
                                       </summary>
-                                      <div className="mt-2 text-zinc-700 font-medium whitespace-pre-wrap leading-relaxed select-text">
-                                        {msg.reasoning ||
-                                          "Analyzing query & consulting knowledge base..."}
+                                      <div className="mt-2 text-zinc-700 font-medium whitespace-pre-wrap leading-relaxed select-text flex items-center gap-2">
+                                        {/* {!msg.reasoning && (
+                                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                        )} */}
+                                        <span>
+                                          {msg.reasoning ||
+                                            msg.statusText ||
+                                            "Analyzing query & consulting knowledge base..."}
+                                        </span>
                                       </div>
                                     </details>
                                   </div>
@@ -736,7 +754,9 @@ function AiPageContent() {
                                         />
                                       </>
                                     ) : (
-                                      <MarkdownFormatter content={msg.content} />
+                                      <MarkdownFormatter
+                                        content={msg.content}
+                                      />
                                     )}
                                   </div>
                                 )}
