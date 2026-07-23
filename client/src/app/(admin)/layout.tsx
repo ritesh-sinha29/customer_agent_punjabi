@@ -4,6 +4,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/modules/admin/adminSidebar";
+import { AdminHeader } from "@/modules/admin/adminHeader";
 
 export default function AdminLayout({
   children,
@@ -15,14 +16,7 @@ export default function AdminLayout({
       <div className="flex min-h-screen w-full ">
         <AdminSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          {/* Header area with trigger */}
-          <header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
-            <SidebarTrigger className="-ml-1" />
-            <div className="h-4 w-px bg-border" />
-            <span className="text-sm font-medium text-muted-foreground">
-              Admin Portal
-            </span>
-          </header>
+          <AdminHeader />
 
           {/* Main scrollable content area */}
           <main className="flex-1 p-6">{children}</main>

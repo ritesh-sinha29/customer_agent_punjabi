@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ChevronDown,
   Copy,
+  Languages,
   LeafyGreen,
   Loader2,
   Mic,
@@ -19,8 +20,9 @@ import {
   User,
   Vegan,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
-import { useState, useEffect, Suspense } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -33,6 +35,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
 import { Marker, MarkerContent } from "@/components/ui/marker";
 import {
   Message,
@@ -48,13 +51,12 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Textarea } from "@/components/ui/textarea";
-import { signIn, signOut, useSession } from "@/lib/auth-client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useTypewriter } from "@/hooks/use-typewriter";
+import { Textarea } from "@/components/ui/textarea";
 import { useAgentSSE } from "@/hooks/use-agent-sse";
-import { MarkdownFormatter } from "@/components/ui/markdown-formatter";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useTypewriter } from "@/hooks/use-typewriter";
+import { signIn, signOut, useSession } from "@/lib/auth-client";
+import { LiveWaveform } from "@/modules/ai/live-waveform";
 
 interface ChatMessage {
   id: string;
@@ -62,6 +64,8 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   reasoning?: string;
+  duration?: number;
+  memoryUpdated?: boolean;
 }
 
 const SUGGESTIONS_EN = [
@@ -99,14 +103,147 @@ function AiPageContent() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
+  const [translations, setTranslations] = useState<
+    Record<
+      string,
+      {
+        text: string;
+        loading: boolean;
+        showTranslated: boolean;
+        error?: boolean;
+      }
+    >
+  >({});
+
+  // Voice STT Recording States
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const handleMicClick = async () => {
+    if (isTranscribing) return;
+
+    if (isRecording) {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("Microphone access is not supported in your browser.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : undefined,
+      });
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+
+        if (audioChunksRef.current.length === 0) {
+          toast.error("No audio recorded.");
+          return;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: mediaRecorder.mimeType || "audio/webm",
+        });
+
+        setIsTranscribing(true);
+        const toastId = toast.loading(
+          lang === "en"
+            ? "Transcribing & translating your voice to English..."
+            : "ਤੁਹਾਡੀ ਆਵਾਜ਼ ਨੂੰ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ...",
+        );
+
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "audio.webm");
+
+          const res = await fetch("/api/stt", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || "Speech transcription failed.");
+          }
+
+          if (data.text) {
+            console.log("🎤 Transcribed text output:", data.text);
+            setInput((prev) => (prev ? `${prev} ${data.text}` : data.text));
+            toast.success(
+              lang === "en"
+                ? "Converted to English!"
+                : "ਆਵਾਜ਼ ਸਫਲਤਾਪੂਰਵਕ ਅੰਗਰੇਜ਼ੀ 'ਚ ਤਬਦੀਲ ਹੋ ਗਈ!",
+              { id: toastId },
+            );
+          } else {
+            toast.error("Could not recognize any spoken text.", {
+              id: toastId,
+            });
+          }
+        } catch (err: any) {
+          console.error("STT Error:", err);
+          toast.error(err.message || "Failed to transcribe audio.", {
+            id: toastId,
+          });
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      toast.info(
+        lang === "en"
+          ? "Listening... Speak in Punjabi, Hindi or English. Click mic again to finish."
+          : "ਸੁਣ ਰਿਹਾ ਹੈ... ਪੰਜਾਬੀ, ਹਿੰਦੀ ਜਾਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਬੋਲੋ। ਪੂਰਾ ਹੋਣ 'ਤੇ ਮਾਈਕ 'ਤੇ ਕਲਿੱਕ ਕਰੋ।",
+      );
+    } catch (err) {
+      console.error("Microphone access error:", err);
+      toast.error("Microphone permission denied or unavailable.");
+    }
+  };
 
   const [threadId, setThreadId] = useState<string>(() => {
-    return urlThreadId || `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    return (
+      urlThreadId ||
+      `thread-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+    );
   });
   const userId = session?.user?.id || "guest_user";
 
-  const { messages, setMessages, isLoading, pendingApproval, sendMessage, sendApproval } =
-    useAgentSSE(threadId, userId);
+  const {
+    messages,
+    setMessages,
+    isLoading,
+    pendingApproval,
+    sendMessage,
+    sendApproval,
+  } = useAgentSSE(threadId, userId);
 
   // Sync URL query parameter and threadId state
   useEffect(() => {
@@ -124,8 +261,11 @@ function AiPageContent() {
     let active = true;
     const fetchMessages = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-        const res = await fetch(`${backendUrl}/api/v1/agent/threads/${threadId}/messages`);
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+        const res = await fetch(
+          `${backendUrl}/api/v1/agent/threads/${threadId}/messages`,
+        );
         if (!res.ok) throw new Error("Failed to fetch messages");
         const data = await res.json();
         if (data.success && active) {
@@ -166,13 +306,17 @@ function AiPageContent() {
     setInput("");
   };
 
-  const handleCopy = async (content: string) => {
+  const handleCopy = async (content: string, isUser = false) => {
     try {
       await navigator.clipboard.writeText(content);
-      toast.success("Response copied to clipboard!");
+      toast.success(
+        isUser
+          ? "Message copied to clipboard!"
+          : "Response copied to clipboard!",
+      );
     } catch (err) {
       console.error("Failed to copy text: ", err);
-      toast.error("Failed to copy response.");
+      toast.error("Failed to copy text.");
     }
   };
 
@@ -186,6 +330,79 @@ function AiPageContent() {
     toast.success("Thank you for your feedback!", {
       description: "Response downvoted.",
     });
+  };
+
+  const handleTranslate = async (msgId: string, content: string) => {
+    if (translations[msgId]?.showTranslated) {
+      setTranslations((prev) => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showTranslated: false },
+      }));
+      return;
+    }
+
+    if (translations[msgId]?.text) {
+      setTranslations((prev) => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showTranslated: true },
+      }));
+      return;
+    }
+
+    setTranslations((prev) => ({
+      ...prev,
+      [msgId]: { text: "", loading: true, showTranslated: false, error: false },
+    }));
+
+    try {
+      const backendUrl =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+      // 25 second timeout controller for Temporal execution allowance
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      const res = await fetch(`${backendUrl}/api/v1/agent/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const data = await res.json();
+      if (res.ok && data.translated_text) {
+        setTranslations((prev) => ({
+          ...prev,
+          [msgId]: {
+            text: data.translated_text,
+            loading: false,
+            showTranslated: true,
+            error: false,
+          },
+        }));
+        toast.success("Translated message to Punjabi!");
+      } else {
+        throw new Error(data.detail || data.error || "Translation failed");
+      }
+    } catch (err: any) {
+      console.error("Translation error:", err);
+      const isTimeout = err.name === "AbortError";
+      toast.error(
+        isTimeout
+          ? "Translation timed out (25s limit). Click Retry to try again."
+          : "Translation failed. Click Retry to try again.",
+      );
+      setTranslations((prev) => ({
+        ...prev,
+        [msgId]: {
+          text: "",
+          loading: false,
+          showTranslated: false,
+          error: true,
+        },
+      }));
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -425,33 +642,89 @@ function AiPageContent() {
                           )}
                         </MessageAvatar>
                         <MessageContent>
-                          {msg.role === "assistant" && msg.reasoning && (
+                          {msg.role === "assistant" && (
                             <>
-                              {/* Case 1: Thinking phase (executing and no content yet) */}
+                              {/* Thinking phase (ONLY visible while executing and before response content arrives) */}
                               {isLoading &&
                                 msg.id === messages[messages.length - 1]?.id &&
                                 !msg.content && (
                                   <div className="mb-2 w-full max-w-full">
                                     <details
                                       open
-                                      className="group text-xs text-emerald-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 select-none"
+                                      className="group text-xs text-emerald-800 bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 select-none transition-all shadow-2xs"
                                     >
                                       <summary className="cursor-pointer flex items-center justify-between list-none outline-none [&::-webkit-details-marker]:hidden">
                                         <div className="flex items-center gap-2">
                                           <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
-                                          <span className="font-bold">
+                                          <span className="font-bold text-emerald-900">
                                             Thinking...
                                           </span>
                                         </div>
-                                        <ChevronDown className="w-4 h-4 text-zinc-500 transition-transform duration-200 group-open:rotate-180" />
+                                        <ChevronDown className="w-4 h-4 text-emerald-600 transition-transform duration-200 group-open:rotate-180" />
                                       </summary>
-                                      <div className="mt-2 text-zinc-600 font-medium whitespace-pre-wrap leading-relaxed select-text">
-                                        {msg.reasoning}
+                                      <div className="mt-2 text-zinc-700 font-medium whitespace-pre-wrap leading-relaxed select-text flex items-center gap-2">
+                                        {/* {!msg.reasoning && (
+                                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                        )} */}
+                                        <span>
+                                          {msg.reasoning ||
+                                            msg.statusText ||
+                                            "Analyzing query & consulting knowledge base..."}
+                                        </span>
                                       </div>
                                     </details>
                                   </div>
                                 )}
                             </>
+                          )}
+                          {msg.approvalCard && (
+                            <div className="mb-2.5 w-full ">
+                              <details className="group rounded-xl bg-neutral-100/90 border border-neutral-200/80 p-3 text-xs text-neutral-800 transition-all select-none shadow-2xs">
+                                <summary className="cursor-pointer flex items-center justify-between list-none font-medium outline-none [&::-webkit-details-marker]:hidden">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`h-2 w-2 rounded-full ${
+                                        msg.approvalCard.status === "approved"
+                                          ? "bg-emerald-600"
+                                          : "bg-zinc-400"
+                                      }`}
+                                    />
+                                    <span className="font-semibold text-neutral-900 text-xs">
+                                      {msg.approvalCard.status === "approved"
+                                        ? msg.approvalCard.action === "booking"
+                                          ? lang === "en"
+                                            ? "Booking Confirmed for VRSA Agrotech Products"
+                                            : "VRSA Agrotech ਉਤਪਾਦਾਂ ਦੀ ਪੁਸ਼ਟੀ ਹੋ ਗਈ ਹੈ"
+                                          : lang === "en"
+                                            ? "Support Request Submitted"
+                                            : "ਸਹਾਇਤਾ ਬੇਨਤੀ ਦਰਜ ਕੀਤੀ ਗਈ ਹੈ"
+                                        : msg.approvalCard.action === "booking"
+                                          ? lang === "en"
+                                            ? "Booking Request Cancelled"
+                                            : "ਬੁਕਿੰਗ ਬੇਨਤੀ ਰੱਦ ਕੀਤੀ ਗਈ ਹੈ"
+                                          : lang === "en"
+                                            ? "Support Request Cancelled"
+                                            : "ਸਹਾਇਤਾ ਬੇਨਤੀ ਰੱਦ ਕੀਤੀ ਗਈ ਹੈ"}
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="w-4 h-4 text-neutral-500 transition-transform duration-200 group-open:rotate-180 shrink-0" />
+                                </summary>
+                                <div className="mt-2.5 pt-2.5 border-t border-neutral-200/80 text-[11px] text-neutral-700 space-y-1 bg-white/70 p-2.5 rounded-lg border border-neutral-200/40 select-text">
+                                  <div>
+                                    <strong>
+                                      {lang === "en" ? "Product" : "ਉਤਪਾਦ"}:
+                                    </strong>{" "}
+                                    {msg.approvalCard.details?.product_name}
+                                  </div>
+                                  <div>
+                                    <strong>
+                                      {lang === "en" ? "Quantity" : "ਮਾਤਰਾ"}:
+                                    </strong>{" "}
+                                    {msg.approvalCard.details?.quantity}
+                                  </div>
+                                </div>
+                              </details>
+                            </div>
                           )}
                           {msg.content && (
                             <Bubble
@@ -469,22 +742,92 @@ function AiPageContent() {
                                 {msg.role === "user" ? (
                                   msg.content
                                 ) : (
-                                  <MarkdownFormatter content={msg.content} />
+                                  <div>
+                                    {translations[msg.id]?.showTranslated ? (
+                                      <>
+                                        <div className="mb-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+                                          <Languages className="w-3 h-3 text-emerald-600" />
+                                          ਅਨੁਵਾਦ (Punjabi Translation)
+                                        </div>
+                                        <MarkdownFormatter
+                                          content={translations[msg.id].text}
+                                        />
+                                      </>
+                                    ) : (
+                                      <MarkdownFormatter
+                                        content={msg.content}
+                                      />
+                                    )}
+                                  </div>
                                 )}
                               </BubbleContent>
                             </Bubble>
                           )}
                           <MessageFooter className="flex items-center gap-3 w-full mt-0.5 min-h-[24px]">
-                            <div className="flex items-center gap-2 text-neutral-700 text-xs font-medium">
+                            <div className="flex items-center gap-1.5 text-neutral-700 text-xs font-medium">
+                              {msg.role === "user" && msg.content && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 rounded-md text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 cursor-pointer shrink-0 transition-colors"
+                                  onClick={() => handleCopy(msg.content, true)}
+                                  title="Copy message"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              )}
                               <span>{msg.timestamp}</span>
                               {msg.duration !== undefined && (
                                 <span>
                                   • Executed in {msg.duration.toFixed(1)}s
                                 </span>
                               )}
+                              {msg.memoryUpdated && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                  Memory Updated
+                                </span>
+                              )}
                             </div>
                             {msg.role === "assistant" && msg.content && (
-                              <div className="flex items-center gap-0.5 ">
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`h-6 px-2 rounded-md text-xs font-medium cursor-pointer shrink-0 transition-all ${
+                                    translations[msg.id]?.error
+                                      ? "bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100"
+                                      : translations[msg.id]?.showTranslated
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                                        : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+                                  }`}
+                                  onClick={() =>
+                                    handleTranslate(msg.id, msg.content)
+                                  }
+                                  title={
+                                    translations[msg.id]?.error
+                                      ? "Click to retry translation"
+                                      : "Translate message to Punjabi"
+                                  }
+                                >
+                                  {translations[msg.id]?.loading ? (
+                                    <Loader2 className="w-3 h-3 animate-spin text-emerald-700" />
+                                  ) : translations[msg.id]?.error ? (
+                                    <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-800">
+                                      <Languages className="w-3.5 h-3.5" />
+                                      ਮੁੜ ਕੋਸ਼ਿਸ਼ (Retry)
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-[11px] font-semibold">
+                                      <Languages className="w-3.5 h-3.5" />
+                                      {translations[msg.id]?.showTranslated
+                                        ? "English"
+                                        : "ਅਨੁਵਾਦ (PA)"}
+                                    </span>
+                                  )}
+                                </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -667,13 +1010,48 @@ function AiPageContent() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5 cursor-pointer shrink-0"
-                  disabled={isLoading || !!pendingApproval}
-                  title="Voice input (decorative)"
+                  onClick={handleMicClick}
+                  className={`h-8 w-8 rounded-xl transition-all cursor-pointer shrink-0 relative ${
+                    isRecording
+                      ? "bg-red-100 text-red-600 hover:bg-red-200 border border-red-300"
+                      : isTranscribing
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "text-zinc-400 hover:text-zinc-600 hover:bg-[#2E3A2F]/5"
+                  }`}
+                  disabled={isLoading || !!pendingApproval || isTranscribing}
+                  title={
+                    isRecording
+                      ? "Click to stop & transcribe"
+                      : isTranscribing
+                        ? "Transcribing voice..."
+                        : "Voice input (Speak in Punjabi / Hindi / English)"
+                  }
                 >
-                  <Mic className="w-4 h-4" />
+                  {isTranscribing ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
+                  ) : isRecording ? (
+                    <span className="relative flex items-center justify-center">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <Mic className="w-4 h-4 text-red-600 relative z-10" />
+                    </span>
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
+
+              {/* Centered waveform */}
+              {(isRecording || isTranscribing) && (
+                <div className="flex-1 max-w-[200px] mx-4 h-9 flex items-center justify-center">
+                  <LiveWaveform
+                    active={isRecording}
+                    processing={isTranscribing}
+                    mode="static"
+                    height={28}
+                    barColor={isRecording ? "#ef4444" : "#10b981"}
+                  />
+                </div>
+              )}
 
               {/* Right action */}
               <Button

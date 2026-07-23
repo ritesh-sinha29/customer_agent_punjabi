@@ -1,84 +1,143 @@
-from langchain_core.messages import AIMessage
-from langchain_core.runnables import RunnableConfig
-from src.app.services.query_optimizer import query_optimizer
-from src.app.services.retrieval_service import retrieval_service
-from src.app.core.config import settings
-from langchain_openai import ChatOpenAI
-from src.app.graphs.state import AgentState
+import asyncio
+import logging
+from typing import Dict, Any, List
+import logfire
 
-async def rag_agent_node(state: AgentState, config: RunnableConfig) -> dict:
+from src.app.services.query_optimizer import QueryOptimizer
+from src.app.services.retrieval_service import RetrievalService, retrieval_service
+from src.app.graphs.state import SupervisorState
+
+logger = logging.getLogger("RAGSubAgent")
+query_optimizer = QueryOptimizer()
+
+
+async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
     """
-    RAG Agent: Performs query expansion/optimization, executes parallel dense+sparse 
-    hybrid search, applies Jina/RRF reranking, and answers questions grounded in 
-    VRSA Agrotech documentation.
-    """
-    # 1. Extract messages
-    messages = state["messages"]
-    if not messages:
-        return {"next": "supervisor"}
-        
-    current_query = messages[-1].content
+    RAG Sub-Agent for Vrsa Agrotech.
     
-    # 2. Format past conversation history for the query optimizer
-    chat_history = []
-    for msg in messages[:-1]:
-        role = "user" if msg.type == "human" else "assistant"
-        chat_history.append({"role": role, "content": msg.content})
-        
+    6-STEP RAG PIPELINE:
+    ====================
+    Step 1: Extract latest user query & prepare conversation history.
+    Step 2: Multi-Query Expansion via QueryOptimizer (3 query variations & Punjabi/Hinglish term resolution).
+    Step 3: Generate BM25 Sparse Vectors (bm25_service) + Dense Vectors (embedding_service).
+    Step 4: Parallel Hybrid Search on Pinecone (pinecone_service).
+    Step 5: Candidate Reranking via Jina Reranker v2 / RRF fusion (filters candidate pool to top 5 or fewer chunks).
+    Step 6: Return clean internal facts payload back to Supervisor State.
+
+    RETURN RESPONSE EXAMPLE BACK TO SUPERVISOR STATE:
+    =================================================
+    {
+        "internal_facts": [
+            {
+                "subagent": "rag_agent",
+                "original_query": "my buffalo gives low milk fat, which supplement to use?",
+                "reranked_chunks": [
+                    "MaxaPro-DS Dairy is a double-strength supplement formulated to increase daily milk production...",
+                    "Buffalo-F 1.5X increases fat content by up to 1.5% in high-yielding buffaloes...",
+                    "Dosage: Mix 50g daily in cattle feed for optimal results..."
+                ]
+            }
+        ],
+        "next": "supervisor_sales_agent"
+    }
+    """
+    messages = state.get("messages", [])
     user_id = state.get("user_id", "guest_user")
     
-    # 3. Optimize the query (expands to 3 English variations)
-    optimized_queries = query_optimizer.optimize_query(
-        chat_history=chat_history,
-        current_query=current_query,
-        user_id=user_id
-    )
+    # -------------------------------------------------------------------------
+    # STEP 1: Extract latest user query & prepare conversation history
+    # -------------------------------------------------------------------------
+    chat_history = []
+    last_user_query = ""
+    for msg in messages:
+        if hasattr(msg, "type"):
+            role = "user" if msg.type == "human" else "assistant"
+            content = msg.content
+        elif isinstance(msg, dict):
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+        else:
+            role = "user"
+            content = str(msg)
+            
+        chat_history.append({"role": role, "content": content})
+        if role == "user":
+            last_user_query = content
+
+    if not last_user_query:
+        last_user_query = "Vrsa Agrotech animal nutrition supplements and dairy products"
+
+    print("\n" + "=" * 80)
+    print(f"[RAG SUB-AGENT] STEP 1: USER QUERY EXTRACTED -> '{last_user_query}'")
+
+    # -------------------------------------------------------------------------
+    # STEP 2: Multi-Query Expansion via QueryOptimizer (3 variations)
+    # -------------------------------------------------------------------------
+    try:
+        expanded_queries = await asyncio.to_thread(
+            query_optimizer.optimize_query,
+            chat_history=chat_history,
+            current_query=last_user_query,
+            user_id=user_id
+        )
+        if not expanded_queries:
+            expanded_queries = [last_user_query]
+    except Exception as e:
+        logger.error(f"[RAG Sub-Agent] Step 2 error: {e}. Using original query.")
+        expanded_queries = [last_user_query]
+
+    print("\n[RAG SUB-AGENT] STEP 2: 3 QUERY EXPANSIONS (QueryOptimizer):")
+    for idx, q in enumerate(expanded_queries[:3], 1):
+        print(f"   {idx}. {q}")
     
-    # 4. Perform parallel hybrid search and rerank
-    chunks = await retrieval_service.retrieve_parallel(
-        queries=optimized_queries,
-        top_k=4,
-        namespace="default",
-        user_id=user_id,
-        original_query=current_query
-    )
-    
-    # 5. Format retrieved documents context
-    context_str = ""
-    for idx, match in enumerate(chunks, 1):
-        text = match.get("metadata", {}).get("text", "")
-        context_str += f"[{idx}] (Score: {match.get('score', 0.0):.4f}): {text}\n\n"
+    logfire.info("Multi-query expansions generated", original=last_user_query, expansions=expanded_queries[:3])
+
+    # -------------------------------------------------------------------------
+    # STEP 3 & 4: BM25 Sparse + Dense Hybrid Search on Pinecone
+    # (Step 3: bm25_service generates sparse vectors + embedding_service generates dense vectors)
+    # (Step 4: pinecone_service executes parallel hybrid search)
+    # STEP 5: Candidate Reranking via Jina Reranker v2 / RRF fusion (top 5 or fewer)
+    # -------------------------------------------------------------------------
+    reranked_chunks = []
+    rag_dense_vec = None
+    try:
+        retrieved_matches, rag_dense_vec = await retrieval_service.retrieve_parallel(
+            queries=expanded_queries,
+            top_k=5,
+            user_id=user_id,
+            original_query=last_user_query,
+            namespace="default",
+            return_vector=True
+        )
         
-    # 6. Call the OpenAI model with grounded context
-    system_prompt = (
-        "You are an expert animal nutrition advisor at VRSA AGROTECH.\n"
-        "Your task is to answer the user's questions about company products, animal recommendations, "
-        "and nutritional advice based on the retrieved contexts below.\n\n"
-        f"Retrieved Documentation:\n{context_str}\n"
-        "Instructions:\n"
-        "- Use the retrieved documentation to address the user's query.\n"
-        "- Do not say that you do not know or that information is not available. Always provide a helpful and informative response using the retrieved context.\n"
-        "- If the retrieved documentation does not explicitly cover the exact question (such as specific fat content numbers or milk quality details), connect the query to the general benefits of the relevant products in the context (like MaxaPro-DS Dairy supporting lactation efficiency, rumen health, and milk yield consistency or Buffalo-Power 2X supporting buffalo rumen efficiency and milk yield) and explain how these products can help the user's animal.\n"
-        "- Be encouraging, professional, and helpful. Always provide a proper response.\n"
-        "- Respond in a clear format. You must write your response in English only, even if the user asked their question in Punjabi or Hinglish."
-    )
-    
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        openai_api_key=settings.OPENAI_API_KEY,
-        temperature=0.0,
-        streaming=True
-    )
-    
-    # Pass config so that Langfuse callbacks and telemetry trace the LLM run
-    prompt = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": current_query}
-    ]
-    response = await llm.ainvoke(prompt, config)
-    
-    # Return message and route back to supervisor
+        print(f"\n[RAG SUB-AGENT] STEP 5: TOP RERANKED CHUNKS RETURNED ({len(retrieved_matches)}):")
+        for idx, match in enumerate(retrieved_matches, 1):
+            text = match.get("metadata", {}).get("text", "") or match.get("metadata", {}).get("content", "")
+            score = match.get("score", 0.0)
+            if text:
+                reranked_chunks.append(text)
+                snippet = text[:140].replace("\n", " ") + "..." if len(text) > 140 else text
+                print(f"   Chunk #{idx} [Rerank Score: {score:.4f}]: {snippet}")
+
+    except Exception as e:
+        logger.error(f"[RAG Sub-Agent] Step 3-5 error: {e}")
+
+    # -------------------------------------------------------------------------
+    # STEP 6: Store clean payload in Supervisor State & route to supervisor_sales_agent
+    # -------------------------------------------------------------------------
+    existing_facts = list(state.get("internal_facts") or [])
+    payload = {
+        "subagent": "rag_agent",
+        "original_query": last_user_query,
+        "reranked_chunks": reranked_chunks,  # Top 5 (or fewer) reranked chunks
+        "rag_dense_vec": rag_dense_vec
+    }
+    existing_facts.append(payload)
+
+    print(f"\n[RAG SUB-AGENT] STEP 6: Sent {len(reranked_chunks)} reranked chunks to Supervisor State -> Next: 'supervisor_sales_agent'")
+    print("=" * 80 + "\n")
+
     return {
-        "messages": [AIMessage(content=response.content, name="rag_agent")],
-        "next": "supervisor"
+        "internal_facts": existing_facts,
+        "next": "supervisor_sales_agent"
     }

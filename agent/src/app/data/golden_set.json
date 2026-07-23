@@ -1,0 +1,142 @@
+[
+  {
+    "id": "tc-01",
+    "category": "Dosage & Usage",
+    "query": "What is the recommended daily dosage for Horsa-550X-Turbo?",
+    "ground_truth": "Horsa-550X-Turbo should be administered at 50-100 grams daily per adult cow or buffalo mixed in feed.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-02",
+    "category": "Product Ingredients",
+    "query": "What are the main active ingredients in TrioSan Gold?",
+    "ground_truth": "TrioSan Gold contains chelated minerals, live yeast culture, bypass fat, biotin, and essential vitamins A, D3, and E.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-03",
+    "category": "Milk Yield Benefits",
+    "query": "How does MaxaPro-DS Dairy help increase milk fat percentage?",
+    "ground_truth": "MaxaPro-DS Dairy enhances rumen fermentation and contains rumen-protected fat and calcium salts to increase fat content by up to 0.5-0.8%.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-04",
+    "category": "Product Selection",
+    "query": "Which supplement is best for high-yielding buffaloes during early lactation?",
+    "ground_truth": "Buffalo-Power 2X is specifically formulated for high-yielding buffaloes in early lactation to maintain energy balance and boost milk yield.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-05",
+    "category": "Dosage & Usage",
+    "query": "Can MaxaPro Liquid be given directly or must it be mixed with fodder?",
+    "ground_truth": "MaxaPro Liquid can be mixed directly into cattle feed or administered orally using an drenching bottle as per veterinary guidance.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-06",
+    "category": "Order Booking",
+    "query": "I want to place an order for 5 bags of TrioSan Gold.",
+    "ground_truth": "User intends to create a new product booking for 5 bags of TrioSan Gold.",
+    "expected_route": "BOOKING_NODE"
+  },
+  {
+    "id": "tc-07",
+    "category": "Order History",
+    "query": "Can you check the status of my recent booking?",
+    "ground_truth": "User wants to check existing order updates or order status.",
+    "expected_route": "BOOKING_NODE"
+  },
+  {
+    "id": "tc-08",
+    "category": "Support & Callback",
+    "query": "I received a damaged bag of Horsa-550X-Turbo, please log a complaint and request a callback.",
+    "ground_truth": "User wants to create a support ticket / query for a damaged product and request a callback.",
+    "expected_route": "QUERY_NODE"
+  },
+  {
+    "id": "tc-09",
+    "category": "Support Tickets",
+    "query": "Show me my open support queries and callback requests.",
+    "ground_truth": "User wants to view their support tickets.",
+    "expected_route": "QUERY_NODE"
+  },
+  {
+    "id": "tc-10",
+    "category": "Sales & Greeting",
+    "query": "Hello! Good morning, who are you and what do you sell?",
+    "ground_truth": "Greetings and general introduction to Vrsa Agrotech animal nutrition catalog.",
+    "expected_route": "NONE"
+  },
+  {
+    "id": "tc-11",
+    "category": "Dosage & Usage",
+    "query": "What is the recommended dosage for Buffalo-F 1.5X for pregnant cows?",
+    "ground_truth": "Buffalo-F 1.5X should be fed at 50 grams daily during the dry and advanced pregnancy period.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-12",
+    "category": "Product Comparison",
+    "query": "What is the difference between MaxaPro-DS Dairy and MaxaPro Liquid?",
+    "ground_truth": "MaxaPro-DS is a powder mineral supplement for daily feed mixing, while MaxaPro Liquid is a quick-energy liquid drench supplement.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-13",
+    "category": "Order Booking",
+    "query": "Please book 2 drums of MaxaPro Liquid for my farm in Ludhiana.",
+    "ground_truth": "User intends to place a booking order for 2 drums of MaxaPro Liquid.",
+    "expected_route": "BOOKING_NODE"
+  },
+  {
+    "id": "tc-14",
+    "category": "Safety & Side Effects",
+    "query": "Are there any side effects if a cow consumes extra Horsa-550X-Turbo?",
+    "ground_truth": "Horsa-550X-Turbo is safe when given as directed; excessive intake should be avoided to prevent mild digestive upset. Ensure adequate fresh water.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-15",
+    "category": "Pricing & Packaging",
+    "query": "What packaging sizes are available for TrioSan Gold?",
+    "ground_truth": "TrioSan Gold is available in 1 kg, 5 kg, 10 kg, and 25 kg commercial farm packs.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-16",
+    "category": "Storage & Shelf Life",
+    "query": "How should I store MaxaPro Liquid and what is its shelf life?",
+    "ground_truth": "Store in a cool, dry place away from direct sunlight. Shelf life is 12 months from manufacturing date.",
+    "expected_route": "RAG_SEARCH"
+  },
+  {
+    "id": "tc-17",
+    "category": "Order Booking",
+    "query": "Order 10 packs of Buffalo-Power 2X.",
+    "ground_truth": "User wants to create a new order booking for 10 packs of Buffalo-Power 2X.",
+    "expected_route": "BOOKING_NODE"
+  },
+  {
+    "id": "tc-18",
+    "category": "Support Ticket",
+    "query": "I need help with my payment receipt for my order last week.",
+    "ground_truth": "User wants to create a query or request assistance regarding payment receipt.",
+    "expected_route": "QUERY_NODE"
+  },
+  {
+    "id": "tc-19",
+    "category": "Sales & General",
+    "query": "Do you deliver products to Bathinda district?",
+    "ground_truth": "General inquiry about delivery coverage across Punjab districts including Bathinda.",
+    "expected_route": "NONE"
+  },
+  {
+    "id": "tc-20",
+    "category": "Dosage & Usage",
+    "query": "How many days should I feed Buffalo-Power 2X to see an increase in milk yield?",
+    "ground_truth": "Noticeable improvement in milk yield and fat percentage is typically observed within 7 to 10 days of continuous feeding.",
+    "expected_route": "RAG_SEARCH"
+  }
+]

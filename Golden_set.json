@@ -1,0 +1,142 @@
+[
+  {
+    "id": "tc-1",
+    "query": "What is the daily dosage of TrioSan Gold and how is it usually calculated?",
+    "ground_truth": "TrioSan Gold dosage is expressed both on a per-animal and a per-tonne-of-feed basis. The recommended dose is 50–100 g per head, per day, or alternatively 3–5 kg per metric tonne of feed. These rates are a starting reference for diet formulation, and exact inclusion should be back-calculated against the target Ca:Mg ratio and total dietary buffering requirement for the specific ration. Users should always confirm exact inclusion levels against their specific diet formulation and a qualified nutritionist's recommendation.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "TrioSan_Gold.docx"
+  },
+  {
+    "id": "tc-2",
+    "query": "What is TrioSan Gold made of, and why is that composition significant?",
+    "ground_truth": "TrioSan Gold's composition is Lithothamnium calcareum of European origin combined with Magnesium Oxide, in a specific fixed ratio designed to balance solubility with buffering performance. Lithothamnium calcareum is a marine-derived calcium source whose naturally porous structure supports high solubility, while the Magnesium Oxide is a feed-grade magnesium source. This combination is what makes the calcium and magnesium highly soluble in the rumen, so more of it actually dissolves and becomes available compared to conventional feed-grade mineral sources like calcium carbonate.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "TrioSan_Gold.docx"
+  },
+  {
+    "id": "tc-3",
+    "query": "How does TrioSan Gold's buffering capacity affect sodium bicarbonate use in a diet?",
+    "ground_truth": "Approximately one-quarter the amount of TrioSan Gold can replace 100% of the Sodium Bicarbonate requirement in a diet, because TrioSan Gold's buffering capacity is roughly double that of Sodium Bicarbonate. This creates additional dietary space, which can then be reassigned to nutrients such as energy or protein — a formulator can either maintain the diet's energy density using cheaper energy sources, or increase the density within the same space.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "TrioSan_Gold.docx"
+  },
+  {
+    "id": "tc-4",
+    "query": "How should TrioSan Gold be stored, and what is its shelf life?",
+    "ground_truth": "TrioSan Gold should be stored in a cool, dry place away from direct sunlight and moisture, with bags kept sealed tightly between uses to prevent moisture ingress and caking. Bags should be stored off the floor on pallets, away from direct contact with concrete, and stock should be rotated on a first-expiry-first-out (FEFO) basis. Under these recommended storage conditions, the product has a shelf life of 24 months from the date of manufacture, unopened.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "TrioSan_Gold.docx"
+  },
+  {
+    "id": "tc-5",
+    "query": "How is TrioSan Gold administered at the feed mill?",
+    "ground_truth": "TrioSan Gold is intended for inclusion in the compound feed formulation at the feed mill — it is not for direct top-dressing or water-line dosing. The required inclusion rate is calculated based on the target diet's Ca:Mg requirement and available dietary space, then weighed using standard feed-mill batching equipment. It is added at the mineral-inclusion stage of the mixing sequence alongside other micro-ingredients, mixed thoroughly for uniform distribution before pelleting or bagging, and homogeneity is verified periodically through routine feed-mill quality-control sampling.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "TrioSan_Gold.docx"
+  },
+  {
+    "id": "tc-6",
+    "query": "What dose of MaxaPro Liquid should be given to broiler chicks in their first week, and why?",
+    "ground_truth": "For broiler chicks aged Day 1–7, MaxaPro Liquid is dosed at 500 ml per 1,000 L of drinking water for 5–7 consecutive days. This dosing window is positioned for brooding support and early gut conditioning, aligning with the product's Healthy Gut pillar during the chick placement/brooding transition, which the dossier identifies as one of the key stress windows where support is most relevant.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "MaxaPro_Liquid.pdf"
+  },
+  {
+    "id": "tc-7",
+    "query": "What dose of MaxaPro Liquid is recommended for broilers during heat stress, and how does that compare to routine growing-phase dosing?",
+    "ground_truth": "During heat stress or summer conditions, broilers should receive a higher dose of 500–750 ml of MaxaPro Liquid per 1,000 L of drinking water, continued throughout the stress period. This is notably higher than the routine dose for growing broilers (Day 8–28), which is 300–400 ml per 1,000 L, given 3–5 days per week on an alternating schedule for general gut and growth support.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "MaxaPro_Liquid.pdf"
+  },
+  {
+    "id": "tc-8",
+    "query": "What are the guaranteed levels of chelated trace minerals in MaxaPro Liquid per litre?",
+    "ground_truth": "Per litre, MaxaPro Liquid's guaranteed levels of chelated trace minerals are: 8,000 mg of chelated zinc, 6,000 mg of chelated manganese, and 1,200 mg of chelated copper, all sourced as organic trace minerals. The product also contains 40 mg of selenium as an antioxidant-supportive trace mineral, alongside 10,000 IU of vitamin E as the primary antioxidant vitamin.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "MaxaPro_Liquid.pdf"
+  },
+  {
+    "id": "tc-9",
+    "query": "Can MaxaPro Liquid be mixed directly with live vaccines, and what's the correct approach?",
+    "ground_truth": "MaxaPro Liquid should not be mixed directly with a live vaccine dose in the same water batch — doing so risks interfering with vaccine viability. Instead, it should be administered before or after the vaccine window, dosed separately rather than simultaneously. The document notes this compatibility guidance is general and that the veterinarian's specific programme and the vaccine manufacturer's compatibility notes should always be followed.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "MaxaPro_Liquid.pdf"
+  },
+  {
+    "id": "tc-10",
+    "query": "How long can an opened container of MaxaPro Liquid be used, and how should it be stored once opened?",
+    "ground_truth": "Once opened, MaxaPro Liquid should be used within the period indicated on the label, typically 3–6 months, for optimal potency. It should be stored in a cool, dry place away from direct sunlight, ideally below 30°C, with the container kept tightly closed when not in use to prevent contamination and evaporation. Unopened, the product carries a longer shelf life of 24 months from the date of manufacture.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "MaxaPro_Liquid.pdf"
+  },
+  {
+    "id": "tc-11",
+    "query": "What is the physical form and pH of MaxaPro Liquid concentrate?",
+    "ground_truth": "MaxaPro Liquid is a clear-to-amber oral liquid concentrate that is fully miscible in drinking water. The concentrate has a pH of approximately 3.5–4.5 and a specific gravity of approximately 1.05–1.15 g/ml, with a mild, characteristic odour.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "MaxaPro_Liquid.pdf"
+  },
+  {
+    "id": "tc-12",
+    "query": "What is the daily dose of Horsa-550X-Turbo for an adult performance horse?",
+    "ground_truth": "The typical dose for an adult horse is 30–125 ml of the liquid concentrate, or 20–75 g of the powder form, per day. The exact dose depends on the horse's workload and recovery stage — it is dosed from daily maintenance through pre-competition and post-exertion recovery windows, rather than as a single fixed amount.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-13",
+    "query": "What are the three formulation pillars of Horsa-550X-Turbo and what actives support each?",
+    "ground_truth": "Horsa-550X-Turbo is built around three pillars: electrolyte replenishment, joint and connective-tissue support, and muscle recovery. Joint support comes from glucosamine sulphate, chondroitin sulphate and MSM; muscle recovery is supported by B-complex vitamins, chelated magnesium, and vitamin E with organic selenium. The product also includes chelated zinc, copper and manganese as part of its overall active complex.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-14",
+    "query": "What pack sizes does Horsa-550X-Turbo come in and what is its shelf life?",
+    "ground_truth": "Horsa-550X-Turbo is available as a 1 L or 5 L oral liquid concentrate, and separately as a 3 kg powder sachet pack. Its shelf life is 24 months unopened; once the liquid form is opened, it should be used within 3 months.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-15",
+    "query": "What dose of Buffalo-Power 2X is recommended during early lactation versus the dry period?",
+    "ground_truth": "During early lactation (0–60 days), Buffalo-Power 2X is dosed at 100–150 g per day, given daily throughout the period for peak-yield rumen and mineral support — this is the highest dosing window in the product's schedule. During the dry period, the dose drops to 60 g per day, given daily for the last 3 weeks pre-calving, for body-condition and transition support. An additional +25 g is added over the base dose during any heat-stress period, regardless of lactation stage.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-16",
+    "query": "Why was Buffalo-Power 2X developed as a buffalo-specific product rather than adapting a cattle formula?",
+    "ground_truth": "Buffalo-Power 2X was developed because buffalo differ from dairy cattle in rumen turnover rate, heat tolerance and typical ration composition on Indian farms — a gap VRSA AGROTECH's field team identified when a cattle-formulated premix was simply relabelled for buffalo use. It is formulated at higher fermentation-metabolite and chelated-mineral density (the '2X' designation) to reflect buffalo's typically lower voluntary intake and higher heat-load sensitivity, particularly in North Indian summers.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-17",
+    "query": "What is the recommended dose of Buffalo-F 1.5X for post-calving buffalo, and what does it support?",
+    "ground_truth": "For post-calving or fresh buffalo, in the 0–21 day window, Buffalo-F 1.5X is dosed at 75–100 g per day. This stage is positioned to support uterine involution and intake recovery after calving, and administration is meant to begin as soon as the animal is eating normally after calving.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-18",
+    "query": "What does the '1.5X' in Buffalo-F 1.5X refer to, and how does the product differ from Buffalo-Power 2X?",
+    "ground_truth": "The '1.5X' designation reflects Buffalo-F 1.5X's elevated organic-mineral and antioxidant loading relative to Buffalo-Power 2X, calibrated specifically for reproductive rather than purely lactational demand. While Buffalo-Power 2X is a general performance and milk-yield supplement for all milking/working buffalo, Buffalo-F 1.5X is targeted specifically at female buffalo reproductive stages — pre-breeding, immediate post-calving, and repeat-breeder cases.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-19",
+    "query": "What is the dosing schedule for MaxaPro-DS Dairy across different lactation stages?",
+    "ground_truth": "MaxaPro-DS Dairy is dosed stage-specifically: early lactation is dosed at 80–100 g/day, moving through mid- and late-lactation and the dry period at 100 g/day, with the fresh-cow transition window also at 100 g/day. A heat-stress top-up of +20 g/day is added on top of the base dose during hot conditions. Overall, the general dose range given for the product is 50–100 g per head per day depending on lactation stage.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  },
+  {
+    "id": "tc-20",
+    "query": "What quality assurance practices does VRSA AGROTECH apply across its product lines?",
+    "ground_truth": "VRSA AGROTECH runs in-house quality-control testing of raw materials and finished batches across every product line, and provides a batch-wise Certificate of Analysis (COA) on request from the distributor. Manufacturing processes reference Good Manufacturing Practice (GMP)-aligned procedures, fermentation-technology raw materials are sourced from established international suppliers, and batch traceability links each finished product back to its raw-material lot numbers, including for the newer buffalo range.",
+    "expected_node": "RAG_SEARCH",
+    "source_doc": "VRSA-AGROTECH.pdf"
+  }
+]

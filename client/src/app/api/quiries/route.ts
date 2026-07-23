@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { booking, user } from "@/db/schema";
+import { query, user } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 
 export async function GET(_request: NextRequest) {
@@ -12,31 +12,30 @@ export async function GET(_request: NextRequest) {
       headers: activeHeaders,
     });
 
-    // Fetch the recent bookings from all users
-    const recentBookings = await db
+    const recentQuiries = await db
       .select({
-        id: booking.id,
-        productName: booking.productName,
-        qty: booking.qty,
-        status: booking.status,
-        createdAt: booking.createdAt,
+        id: query.id,
+        title: query.title,
+        description: query.description,
+        status: query.status,
+        createdAt: query.createdAt,
         customerName: user.name,
         customerEmail: user.email,
         customerImage: user.image,
       })
-      .from(booking)
-      .leftJoin(user, eq(booking.userId, user.id))
-      .orderBy(desc(booking.createdAt))
+      .from(query)
+      .leftJoin(user, eq(query.userId, user.id))
+      .orderBy(desc(query.createdAt))
       .limit(50);
 
     return NextResponse.json({
       success: true,
-      bookings: recentBookings,
+      quiries: recentQuiries,
     });
   } catch (error: unknown) {
-    console.error("Error fetching bookings:", error);
+    console.error("Error fetching quiries:", error);
     const errorMessage =
-      error instanceof Error ? error.message : "Failed to fetch bookings";
+      error instanceof Error ? error.message : "Failed to fetch quiries";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -53,28 +52,28 @@ export async function PATCH(request: NextRequest) {
 
     if (!id || !status) {
       return NextResponse.json(
-        { error: "Booking ID and status are required" },
+        { error: "Query ID and status are required" },
         { status: 400 }
       );
     }
 
-    const [updatedBooking] = await db
-      .update(booking)
+    const [updatedQuery] = await db
+      .update(query)
       .set({
         status,
         updatedAt: new Date(),
       })
-      .where(eq(booking.id, id))
+      .where(eq(query.id, id))
       .returning();
 
     return NextResponse.json({
       success: true,
-      booking: updatedBooking,
+      query: updatedQuery,
     });
   } catch (error: unknown) {
-    console.error("Error updating booking status:", error);
+    console.error("Error updating query status:", error);
     const errorMessage =
-      error instanceof Error ? error.message : "Failed to update booking status";
+      error instanceof Error ? error.message : "Failed to update query status";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

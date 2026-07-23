@@ -3,9 +3,21 @@ import logging
 
 from temporalio.worker import Worker
 
-from src.app.temporal.activities import ingest_document_activity
+from src.app.temporal.activities import (
+    ingest_document_activity,
+    fetch_user_conversation_activity,
+    check_message_usefulness_groq_activity,
+    consolidate_user_memory_activity,
+    embed_and_save_user_memory_activity,
+    translate_message_activity,
+)
+from src.app.temporal.eval_activities import (
+    run_single_evaluation_activity,
+    save_eval_run_activity,
+)
 from src.app.temporal.temporal_client import get_temporal_client
-from src.app.temporal.workflows import DocumentIngestionWorkflow
+from src.app.temporal.workflows import DocumentIngestionWorkflow, UserMemoryWorkflow, MessageTranslationWorkflow
+from src.app.temporal.eval_workflows import EvaluationSuiteWorkflow
 
 # Configure logging
 logging.basicConfig(
@@ -17,16 +29,25 @@ async def main():
     # Connect to the Temporal client
     client = await get_temporal_client()
 
-    # Initialize the worker with our workflow and activity
+    # Initialize the worker with our workflows and activities
     worker = Worker(
         client,
         task_queue="ingestion-task-queue",
-        workflows=[DocumentIngestionWorkflow],
-        activities=[ingest_document_activity],
+        workflows=[DocumentIngestionWorkflow, UserMemoryWorkflow, EvaluationSuiteWorkflow, MessageTranslationWorkflow],
+        activities=[
+            ingest_document_activity,
+            fetch_user_conversation_activity,
+            check_message_usefulness_groq_activity,
+            consolidate_user_memory_activity,
+            embed_and_save_user_memory_activity,
+            run_single_evaluation_activity,
+            save_eval_run_activity,
+            translate_message_activity,
+        ],
     )
 
     logging.info(
-        "Temporal Worker started. Listening on task queue 'ingestion-task-queue'..."
+        "Temporal Worker started. Listening on task queue 'ingestion-task-queue' (Ingestion, Memory, & Evaluation)..."
     )
     await worker.run()
 
