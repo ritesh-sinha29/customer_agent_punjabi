@@ -75,7 +75,7 @@ export function useAgentSSE(threadId: string, userId: string) {
 
       try {
         const response = await fetch(
-          `${BACKEND_URL}/api/v1/agent/chat/stream`,
+          "/api/v1/agent/chat/stream",
           {
             method: "POST",
             headers: {

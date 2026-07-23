@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage
 from src.app.graphs.graph import agent_graph
 from langfuse.langchain import CallbackHandler
 from src.app.services.db_service import db_service
+from src.app.services.semantic_cache_service import semantic_cache_service
 
 logger = logging.getLogger("AgentChatApi")
 router = APIRouter(
@@ -183,6 +184,19 @@ async def chat_endpoint(req: ChatRequest):
             # 3. Standard execution flow
             if not req.message.strip():
                 raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+            # Check Semantic Cache first
+            cached_data = await semantic_cache_service.get_cached_response(req.user_id, req.message)
+            if cached_data:
+                save_user_message(req.thread_id, req.user_id, req.message)
+                save_assistant_message(req.thread_id, cached_data["response"])
+                return {
+                    "success": True,
+                    "status": "completed",
+                    "response": cached_data["response"],
+                    "thread_id": req.thread_id,
+                    "cached": True
+                }
                 
             save_user_message(req.thread_id, req.user_id, req.message)
             
@@ -223,6 +237,10 @@ async def chat_endpoint(req: ChatRequest):
         ]
         reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
         save_assistant_message(req.thread_id, reply)
+        
+        # Store in Semantic Cache for 7 days
+        if req.approve is None and reply:
+            await semantic_cache_service.set_cached_response(req.user_id, req.message, reply)
         
         # Trigger background memory check if message count is a multiple of 3
         await trigger_background_memory_workflow(req.user_id, req.thread_id)
@@ -310,7 +328,24 @@ async def chat_stream_endpoint(req: ChatRequest):
                 if not req.message.strip():
                     yield f"data: {json.dumps({'type': 'error', 'error': 'Message cannot be empty.'})}\n\n"
                     return
-                    
+
+                # Fast check in Semantic Cache
+                cached_data = await semantic_cache_service.get_cached_response(req.user_id, req.message)
+                if cached_data:
+                    save_user_message(req.thread_id, req.user_id, req.message)
+                    save_assistant_message(req.thread_id, cached_data["response"])
+                    yield f"data: {json.dumps({'type': 'reasoning', 'content': 'Retrieved instantly from 7-day Semantic Cache.'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'token', 'content': cached_data['response']})}\n\n"
+                    payload = {
+                        "type": "completed",
+                        "status": "completed",
+                        "response": cached_data["response"],
+                        "thread_id": req.thread_id,
+                        "cached": True
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+                    return
+
                 save_user_message(req.thread_id, req.user_id, req.message)
                 
                 # Fetch slim, lightweight user core memory context
@@ -352,6 +387,10 @@ async def chat_stream_endpoint(req: ChatRequest):
                 reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
                 save_assistant_message(req.thread_id, reply)
                 
+                # Store in 7-day Semantic Cache
+                if req.approve is None and reply:
+                    await semantic_cache_service.set_cached_response(req.user_id, req.message, reply)
+
                 # Trigger background memory check if message count is a multiple of 3
                 await trigger_background_memory_workflow(req.user_id, req.thread_id)
                 
