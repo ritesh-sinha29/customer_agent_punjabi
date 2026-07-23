@@ -12,7 +12,27 @@ with workflow.unsafe.imports_passed_through():
         check_message_usefulness_groq_activity,
         consolidate_user_memory_activity,
         embed_and_save_user_memory_activity,
+        translate_message_activity,
     )
+
+
+@workflow.defn
+class MessageTranslationWorkflow:
+    @workflow.run
+    async def run(self, text: str) -> str:
+        """
+        Executes message translation to Punjabi with a strict 25-second timeout and retry policy.
+        """
+        return await workflow.execute_activity(
+            translate_message_activity,
+            args=[text],
+            schedule_to_close_timeout=timedelta(seconds=25),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=1),
+                backoff_coefficient=1.5,
+                maximum_attempts=2,
+            ),
+        )
 
 
 @workflow.defn

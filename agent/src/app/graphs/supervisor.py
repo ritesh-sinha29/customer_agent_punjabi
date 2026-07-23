@@ -14,6 +14,7 @@ from src.app.core.config import settings
 from src.app.graphs.state import SupervisorState
 from src.app.services.retrieval_service import retrieval_service
 from src.app.services.db_service import db_service
+from src.app.core.circuit_breaker import llm_circuit_breaker
 
 logger = logging.getLogger("SupervisorAgent")
 
@@ -58,8 +59,20 @@ async def supervisor_router(state: SupervisorState) -> Dict[str, Any]:
     messages = state.get("messages", [])
 
     try:
-        structured_llm = llm.with_structured_output(SupervisorDecision)
-        decision: SupervisorDecision = await structured_llm.ainvoke([SystemMessage(content=ROUTER_PROMPT)] + messages)
+        async def primary_call():
+            structured_llm = llm.with_structured_output(SupervisorDecision)
+            return await structured_llm.ainvoke([SystemMessage(content=ROUTER_PROMPT)] + messages)
+
+        async def fallback_call():
+            fallback_llm = llm_circuit_breaker.get_fallback_llm()
+            if fallback_llm:
+                fallback_structured = fallback_llm.with_structured_output(SupervisorDecision)
+                return await fallback_structured.ainvoke([SystemMessage(content=ROUTER_PROMPT)] + messages)
+            return await primary_call()
+
+        decision: SupervisorDecision = await llm_circuit_breaker.execute(
+            primary_call, fallback_call, context_name="Supervisor Router"
+        )
         
         if decision.action_type == "RAG_SEARCH":
             next_node = "rag_agent"
@@ -98,7 +111,19 @@ async def booking_node(state: SupervisorState) -> Dict[str, Any]:
         f"If you need details like product name or quantity, ask the user directly before calling the tool."
     )
     
-    response = await booking_llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+    async def primary_booking_call():
+        return await booking_llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+
+    async def fallback_booking_call():
+        fallback_llm = llm_circuit_breaker.get_fallback_llm()
+        if fallback_llm:
+            fallback_booking = fallback_llm.bind_tools([create_booking, get_booking_updates])
+            return await fallback_booking.ainvoke([SystemMessage(content=system_prompt)] + messages)
+        return await primary_booking_call()
+
+    response = await llm_circuit_breaker.execute(
+        primary_booking_call, fallback_booking_call, context_name="Booking Node"
+    )
     
     if response.tool_calls:
         tool_call = response.tool_calls[0]
@@ -232,7 +257,19 @@ async def query_node(state: SupervisorState) -> Dict[str, Any]:
         f"If you need details like query title or description, ask the user directly before calling the tool."
     )
     
-    response = await query_llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+    async def primary_query_call():
+        return await query_llm.ainvoke([SystemMessage(content=system_prompt)] + messages)
+
+    async def fallback_query_call():
+        fallback_llm = llm_circuit_breaker.get_fallback_llm()
+        if fallback_llm:
+            fallback_query = fallback_llm.bind_tools([create_query, get_user_queries])
+            return await fallback_query.ainvoke([SystemMessage(content=system_prompt)] + messages)
+        return await primary_query_call()
+
+    response = await llm_circuit_breaker.execute(
+        primary_query_call, fallback_query_call, context_name="Query Node"
+    )
     
     if response.tool_calls:
         tool_call = response.tool_calls[0]
@@ -485,7 +522,18 @@ async def supervisor_sales_agent(state: SupervisorState) -> Dict[str, Any]:
         if facts_str:
             system_content += f"\n\n--- INTERNAL DATA FACTS ---\n{facts_str}"
 
-    response = await sub_agent_llm.ainvoke([SystemMessage(content=system_content)] + messages)
+    async def primary_sales_call():
+        return await sub_agent_llm.ainvoke([SystemMessage(content=system_content)] + messages)
+
+    async def fallback_sales_call():
+        fallback_llm = llm_circuit_breaker.get_fallback_llm()
+        if fallback_llm:
+            return await fallback_llm.ainvoke([SystemMessage(content=system_content)] + messages)
+        return await primary_sales_call()
+
+    response = await llm_circuit_breaker.execute(
+        primary_sales_call, fallback_sales_call, context_name="Supervisor Sales Agent"
+    )
     return {"messages": [response], "next": "__end__"}
 
 

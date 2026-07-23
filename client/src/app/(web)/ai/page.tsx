@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ChevronDown,
   Copy,
+  Languages,
   LeafyGreen,
   Loader2,
   Mic,
@@ -102,6 +103,12 @@ function AiPageContent() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lang, setLang] = useState<"en" | "pan">("pan");
+  const [translations, setTranslations] = useState<
+    Record<
+      string,
+      { text: string; loading: boolean; showTranslated: boolean; error?: boolean }
+    >
+  >({});
 
   // Voice STT Recording States
   const [isRecording, setIsRecording] = useState(false);
@@ -316,6 +323,74 @@ function AiPageContent() {
     toast.success("Thank you for your feedback!", {
       description: "Response downvoted.",
     });
+  };
+
+  const handleTranslate = async (msgId: string, content: string) => {
+    if (translations[msgId]?.showTranslated) {
+      setTranslations((prev) => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showTranslated: false },
+      }));
+      return;
+    }
+
+    if (translations[msgId]?.text) {
+      setTranslations((prev) => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showTranslated: true },
+      }));
+      return;
+    }
+
+    setTranslations((prev) => ({
+      ...prev,
+      [msgId]: { text: "", loading: true, showTranslated: false, error: false },
+    }));
+
+    try {
+      const backendUrl =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+      // 25 second timeout controller for Temporal execution allowance
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      const res = await fetch(`${backendUrl}/api/v1/agent/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const data = await res.json();
+      if (res.ok && data.translated_text) {
+        setTranslations((prev) => ({
+          ...prev,
+          [msgId]: {
+            text: data.translated_text,
+            loading: false,
+            showTranslated: true,
+            error: false,
+          },
+        }));
+        toast.success("Translated message to Punjabi!");
+      } else {
+        throw new Error(data.detail || data.error || "Translation failed");
+      }
+    } catch (err: any) {
+      console.error("Translation error:", err);
+      const isTimeout = err.name === "AbortError";
+      toast.error(
+        isTimeout
+          ? "Translation timed out (25s limit). Click Retry to try again."
+          : "Translation failed. Click Retry to try again.",
+      );
+      setTranslations((prev) => ({
+        ...prev,
+        [msgId]: { text: "", loading: false, showTranslated: false, error: true },
+      }));
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -649,7 +724,21 @@ function AiPageContent() {
                                 {msg.role === "user" ? (
                                   msg.content
                                 ) : (
-                                  <MarkdownFormatter content={msg.content} />
+                                  <div>
+                                    {translations[msg.id]?.showTranslated ? (
+                                      <>
+                                        <div className="mb-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+                                          <Languages className="w-3 h-3 text-emerald-600" />
+                                          ਅਨੁਵਾਦ (Punjabi Translation)
+                                        </div>
+                                        <MarkdownFormatter
+                                          content={translations[msg.id].text}
+                                        />
+                                      </>
+                                    ) : (
+                                      <MarkdownFormatter content={msg.content} />
+                                    )}
+                                  </div>
                                 )}
                               </BubbleContent>
                             </Bubble>
@@ -682,7 +771,43 @@ function AiPageContent() {
                               )}
                             </div>
                             {msg.role === "assistant" && msg.content && (
-                              <div className="flex items-center gap-0.5 ">
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`h-6 px-2 rounded-md text-xs font-medium cursor-pointer shrink-0 transition-all ${
+                                    translations[msg.id]?.error
+                                      ? "bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100"
+                                      : translations[msg.id]?.showTranslated
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                                        : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+                                  }`}
+                                  onClick={() =>
+                                    handleTranslate(msg.id, msg.content)
+                                  }
+                                  title={
+                                    translations[msg.id]?.error
+                                      ? "Click to retry translation"
+                                      : "Translate message to Punjabi"
+                                  }
+                                >
+                                  {translations[msg.id]?.loading ? (
+                                    <Loader2 className="w-3 h-3 animate-spin text-emerald-700" />
+                                  ) : translations[msg.id]?.error ? (
+                                    <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-800">
+                                      <Languages className="w-3.5 h-3.5" />
+                                      ਮੁੜ ਕੋਸ਼ਿਸ਼ (Retry)
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-[11px] font-semibold">
+                                      <Languages className="w-3.5 h-3.5" />
+                                      {translations[msg.id]?.showTranslated
+                                        ? "English"
+                                        : "ਅਨੁਵਾਦ (PA)"}
+                                    </span>
+                                  )}
+                                </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"

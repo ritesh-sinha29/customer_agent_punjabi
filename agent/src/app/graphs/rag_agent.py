@@ -120,6 +120,16 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[RAG Sub-Agent] Step 3-5 error: {e}")
 
+    # Capture dense vector embedding of last_user_query for zero-cost semantic cache reuse
+    rag_dense_vec = None
+    try:
+        from src.app.services.embedding_service import embedding_service
+        vecs = await embedding_service.get_dense_embeddings([last_user_query])
+        if vecs and vecs[0]:
+            rag_dense_vec = vecs[0]
+    except Exception as ee:
+        logger.error(f"Error capturing RAG dense vector for cache: {ee}")
+
     # -------------------------------------------------------------------------
     # STEP 6: Store clean payload in Supervisor State & route to supervisor_sales_agent
     # -------------------------------------------------------------------------
@@ -127,7 +137,8 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
     payload = {
         "subagent": "rag_agent",
         "original_query": last_user_query,
-        "reranked_chunks": reranked_chunks  # Top 5 (or fewer) reranked chunks
+        "reranked_chunks": reranked_chunks,  # Top 5 (or fewer) reranked chunks
+        "rag_dense_vec": rag_dense_vec
     }
     existing_facts.append(payload)
 

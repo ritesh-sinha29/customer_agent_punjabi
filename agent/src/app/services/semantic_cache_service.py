@@ -63,10 +63,32 @@ class SemanticCacheService:
         except Exception as e:
             pass
 
+    def _is_chit_chat_or_short(self, prompt: str) -> bool:
+        """
+        Determines if a prompt is generic chit-chat, greeting, confirmation, or short query (< 4 words).
+        These queries bypass vector embedding generation to save 100% of embedding API costs.
+        """
+        clean = self._normalize_text(prompt)
+        words = clean.split()
+        if len(words) < 4:
+            return True
+        
+        chit_chat_keywords = {
+            "hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening",
+            "thanks", "thank you", "ok", "okay", "bye", "goodbye", "yes confirm", "no cancel",
+            "yes", "no", "sure", "got it", "nice", "awesome", "great"
+        }
+        if clean in chit_chat_keywords:
+            return True
+            
+        return False
+
     async def get_cached_response(self, user_id: str, prompt: str) -> Optional[Dict[str, Any]]:
         """
         Retrieves cached response for user_id and prompt.
-        Checks exact hash first (<3ms), then falls back to vector cosine similarity calculation.
+        1. Checks exact SHA-256 hash first (<2ms, 0 API cost).
+        2. Bypasses vector embedding for chit-chat or short queries (< 4 words).
+        3. Performs vector similarity search for substantive domain questions.
         """
         redis_client = self._get_redis()
         if not redis_client:
@@ -79,7 +101,7 @@ class SemanticCacheService:
         prompt_hash = self._compute_hash(clean_prompt)
         exact_key = f"semcache:{user_id}:hash:{prompt_hash}"
 
-        # ─── 1. FAST PATH: Exact Prompt Hash Lookup (O(1)) ─────────────────────
+        # ─── 1. FAST PATH: Instant Exact Prompt Hash Lookup (O(1), <2ms) ──────
         try:
             exact_hit = await redis_client.get(exact_key)
             if exact_hit:
@@ -90,9 +112,19 @@ class SemanticCacheService:
         except Exception as e:
             logger.error(f"Error checking exact prompt cache: {e}")
 
-        # ─── 2. SEMANTIC PATH: Dense Vector Cosine Similarity Search ───────────
+        # ─── 2. SMART FILTER: Skip Embedding API for Chit-Chat / Short Queries ─
+        if self._is_chit_chat_or_short(prompt):
+            return None
+
+        # ─── 3. SEMANTIC PATH: Dense Vector Cosine Similarity Search ───────────
         try:
-            # Generate dense embedding vector for incoming query
+            # Fetch stored vector items for this user from Redis index
+            index_key = f"semcache:{user_id}:items"
+            item_ids = await redis_client.smembers(index_key)
+            if not item_ids:
+                return None
+
+            # Generate dense embedding vector for query
             embeddings = await embedding_service.get_dense_embeddings([clean_prompt])
             if not embeddings or not embeddings[0]:
                 return None
@@ -102,12 +134,6 @@ class SemanticCacheService:
             if query_norm == 0:
                 return None
             unit_query_vec = query_vec / query_norm
-
-            # Fetch stored vector items for this user from Redis index
-            index_key = f"semcache:{user_id}:items"
-            item_ids = await redis_client.smembers(index_key)
-            if not item_ids:
-                return None
 
             # Batch retrieve vector item payloads using pipeline
             pipe = redis_client.pipeline()
@@ -164,9 +190,16 @@ class SemanticCacheService:
 
         return None
 
-    async def set_cached_response(self, user_id: str, prompt: str, response: str) -> bool:
+    async def set_cached_response(
+        self,
+        user_id: str,
+        prompt: str,
+        response: str,
+        dense_vec: Optional[List[float]] = None
+    ) -> bool:
         """
-        Saves user prompt, dense embedding vector, and agent response to Redis with 7-day TTL.
+        Saves exact SHA-256 prompt hash and (if dense_vec provided from RAG) vector embedding to Redis.
+        Zero extra embedding API calls are executed after supervisor runs!
         """
         redis_client = self._get_redis()
         if not redis_client or not response or not response.strip():
@@ -176,11 +209,15 @@ class SemanticCacheService:
         if not clean_prompt:
             return False
 
+        # Strictly cache ONLY RAG agent messages (where dense_vec is provided by RAG)
+        if not dense_vec:
+            return False
+
         try:
             prompt_hash = self._compute_hash(clean_prompt)
             exact_key = f"semcache:{user_id}:hash:{prompt_hash}"
 
-            # 1. Save Exact Hash Entry with 7-day TTL
+            # 1. Save Exact Hash Entry with 7-day TTL (0 API cost)
             payload = {
                 "prompt": prompt,
                 "response": response,
@@ -188,9 +225,8 @@ class SemanticCacheService:
             }
             await redis_client.setex(exact_key, TTL_SEVEN_DAYS, json.dumps(payload))
 
-            # 2. Save Vector Item for Semantic Matching
-            embeddings = await embedding_service.get_dense_embeddings([clean_prompt])
-            if embeddings and embeddings[0]:
+            # 2. Save Vector Item ONLY if dense_vec was captured from RAG (0 extra API calls!)
+            if dense_vec:
                 item_id = uuid.uuid4().hex[:12]
                 item_key = f"semcache:{user_id}:item:{item_id}"
                 index_key = f"semcache:{user_id}:items"
@@ -198,7 +234,7 @@ class SemanticCacheService:
                 item_payload = {
                     "prompt": prompt,
                     "response": response,
-                    "embedding": embeddings[0],
+                    "embedding": dense_vec,
                     "created_at": time.time()
                 }
 
@@ -208,8 +244,11 @@ class SemanticCacheService:
                 pipe.expire(index_key, TTL_SEVEN_DAYS)
                 await pipe.execute()
 
-                logger.info(f"[Semantic Cache STORED] User={user_id}, Hash={prompt_hash[:8]}, ItemId={item_id}")
-                return True
+                logger.info(f"[Semantic Cache STORED from RAG Vector] User={user_id}, Hash={prompt_hash[:8]}, ItemId={item_id}")
+            else:
+                logger.info(f"[Exact Hash Cache STORED] User={user_id}, Hash={prompt_hash[:8]}")
+
+            return True
 
         except Exception as e:
             logger.error(f"Failed to store entry in semantic cache: {e}")

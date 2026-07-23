@@ -13,12 +13,59 @@ from src.app.graphs.graph import agent_graph
 from langfuse.langchain import CallbackHandler
 from src.app.services.db_service import db_service
 from src.app.services.semantic_cache_service import semantic_cache_service
+from src.app.services.translation_service import translation_service
 
 logger = logging.getLogger("AgentChatApi")
 router = APIRouter(
     prefix="/v1/agent",
     tags=["Agent Chat"]
 )
+
+class TranslateRequest(BaseModel):
+    text: str
+
+
+@router.post("/translate")
+async def translate_endpoint(req: TranslateRequest):
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+    try:
+        from datetime import timedelta
+        from src.app.temporal.temporal_client import get_temporal_client
+        
+        # Execute via Temporal Workflow with strict 25s timeout and retries
+        try:
+            temporal_client = await get_temporal_client()
+            translated = await asyncio.wait_for(
+                temporal_client.execute_workflow(
+                    "MessageTranslationWorkflow",
+                    args=[req.text],
+                    id=f"msg-translation-{uuid.uuid4()}",
+                    task_queue="ingestion-task-queue",
+                    execution_timeout=timedelta(seconds=25)
+                ),
+                timeout=25.0
+            )
+        except Exception as te:
+            logger.warning(f"Temporal translation workflow execution warning ({te}). Falling back to fast direct translation...")
+            translated = await asyncio.wait_for(
+                translation_service.translate_to_punjabi(req.text),
+                timeout=25.0
+            )
+
+        if not translated:
+            raise HTTPException(status_code=500, detail="Translation returned empty result.")
+
+        return {
+            "success": True,
+            "translated_text": translated
+        }
+    except asyncio.TimeoutError:
+        logger.error("Translation request timed out after 25 seconds.")
+        raise HTTPException(status_code=504, detail="Translation timed out after 25 seconds.")
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Translation Error: {str(e)}")
 
 async def trigger_background_memory_workflow(user_id: str, thread_id: str):
     try:
@@ -238,9 +285,16 @@ async def chat_endpoint(req: ChatRequest):
         reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
         save_assistant_message(req.thread_id, reply)
         
-        # Store in Semantic Cache for 7 days
+        # Store in Semantic Cache for 7 days (reusing rag_dense_vec from RAG with 0 extra API calls)
         if req.approve is None and reply:
-            await semantic_cache_service.set_cached_response(req.user_id, req.message, reply)
+            rag_dense_vec = None
+            for item in final_state.get("internal_facts", []):
+                if isinstance(item, dict) and item.get("subagent") == "rag_agent":
+                    rag_dense_vec = item.get("rag_dense_vec")
+                    break
+            await semantic_cache_service.set_cached_response(
+                req.user_id, req.message, reply, dense_vec=rag_dense_vec
+            )
         
         # Trigger background memory check if message count is a multiple of 3
         await trigger_background_memory_workflow(req.user_id, req.thread_id)
@@ -387,9 +441,16 @@ async def chat_stream_endpoint(req: ChatRequest):
                 reply = assistant_messages[-1] if assistant_messages else "I couldn't process your request."
                 save_assistant_message(req.thread_id, reply)
                 
-                # Store in 7-day Semantic Cache
+                # Store in 7-day Semantic Cache (reusing rag_dense_vec from RAG with 0 extra API calls)
                 if req.approve is None and reply:
-                    await semantic_cache_service.set_cached_response(req.user_id, req.message, reply)
+                    rag_dense_vec = None
+                    for item in new_state.values.get("internal_facts", []):
+                        if isinstance(item, dict) and item.get("subagent") == "rag_agent":
+                            rag_dense_vec = item.get("rag_dense_vec")
+                            break
+                    await semantic_cache_service.set_cached_response(
+                        req.user_id, req.message, reply, dense_vec=rag_dense_vec
+                    )
 
                 # Trigger background memory check if message count is a multiple of 3
                 await trigger_background_memory_workflow(req.user_id, req.thread_id)

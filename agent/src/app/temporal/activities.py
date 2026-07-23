@@ -158,8 +158,21 @@ async def embed_and_save_user_memory_activity(user_id: str, semantic_facts: list
             upsert_query,
             (user_id, json.dumps(semantic_facts), json.dumps(current_summaries))
         )
-        activity.logger.info("Saved user memory facts and episodic summaries to PostgreSQL successfully.")
-    except Exception as dbe:
-        activity.logger.error(f"Failed to save user memory to Postgres: {dbe}")
-        raise dbe
+        activity.logger.info(f"Successfully saved user memory for {user_id} to PostgreSQL.")
+        return {"status": "success"}
+    except Exception as e:
+        activity.logger.error(f"Failed to save user memory to PostgreSQL: {e}")
+        raise e
 
+
+@activity.defn
+async def translate_message_activity(text: str) -> str:
+    """
+    Temporal Activity to translate an English assistant message to Punjabi (Gurmukhi) using Groq.
+    """
+    activity.logger.info(f"Executing Temporal translation activity for text length {len(text)}...")
+    from src.app.services.translation_service import translation_service
+    translated = await translation_service.translate_to_punjabi(text)
+    if not translated:
+        raise RuntimeError("Translation result empty")
+    return translated

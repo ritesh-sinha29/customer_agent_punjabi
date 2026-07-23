@@ -9,13 +9,14 @@ from src.app.temporal.activities import (
     check_message_usefulness_groq_activity,
     consolidate_user_memory_activity,
     embed_and_save_user_memory_activity,
+    translate_message_activity,
 )
 from src.app.temporal.eval_activities import (
     run_single_evaluation_activity,
     save_eval_run_activity,
 )
 from src.app.temporal.temporal_client import get_temporal_client
-from src.app.temporal.workflows import DocumentIngestionWorkflow, UserMemoryWorkflow
+from src.app.temporal.workflows import DocumentIngestionWorkflow, UserMemoryWorkflow, MessageTranslationWorkflow
 from src.app.temporal.eval_workflows import EvaluationSuiteWorkflow
 
 # Configure logging
@@ -32,7 +33,7 @@ async def main():
     worker = Worker(
         client,
         task_queue="ingestion-task-queue",
-        workflows=[DocumentIngestionWorkflow, UserMemoryWorkflow, EvaluationSuiteWorkflow],
+        workflows=[DocumentIngestionWorkflow, UserMemoryWorkflow, EvaluationSuiteWorkflow, MessageTranslationWorkflow],
         activities=[
             ingest_document_activity,
             fetch_user_conversation_activity,
@@ -41,6 +42,7 @@ async def main():
             embed_and_save_user_memory_activity,
             run_single_evaluation_activity,
             save_eval_run_activity,
+            translate_message_activity,
         ],
     )
 
