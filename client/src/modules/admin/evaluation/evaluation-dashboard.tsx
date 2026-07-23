@@ -118,9 +118,8 @@ export function EvaluationDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          suite_name:
-            count === 2 ? "Quick Benchmark (2 Samples)" : "Full Benchmark",
-          sample_count: count,
+          suite_name: "Quick Benchmark (2 Samples)",
+          sample_count: 2,
         }),
       });
       if (res.ok) {
@@ -311,7 +310,7 @@ export function EvaluationDashboard() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              Facts supported by PDF docs
+              Facts supported by Company docs
             </p>
           </CardContent>
         </Card>
@@ -351,7 +350,7 @@ export function EvaluationDashboard() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               <Layers className="h-3.5 w-3.5 text-amber-500" />
-              Pinecone + BM25 retriever efficiency
+              retriever efficiency
             </p>
           </CardContent>
         </Card>
@@ -420,7 +419,12 @@ export function EvaluationDashboard() {
                         className={
                           r.status === "COMPLETED"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
+                            : r.status === "INTERRUPTED" ||
+                                r.status === "CANCELLED"
+                              ? "bg-neutral-100 text-neutral-600 border-neutral-200"
+                              : r.status === "FAILED"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
                         }
                       >
                         {r.status}

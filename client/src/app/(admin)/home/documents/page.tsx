@@ -467,7 +467,13 @@ export default function DocumentsPage() {
 
   // TanStack Query Mutation for deleting documents
   const deleteMutation = useMutation({
-    mutationFn: async ({ docId, fileName }: { docId: string; fileName: string }) => {
+    mutationFn: async ({
+      docId,
+      fileName,
+    }: {
+      docId: string;
+      fileName: string;
+    }) => {
       const doc = completedDocs.find((d) => d.doc_id === docId);
       const fileKey = doc?.wasabi_file_key;
 
@@ -822,7 +828,7 @@ export default function DocumentsPage() {
                         <img
                           src={getFileIcon(doc.file_name)}
                           alt="ext-icon"
-                          className="h-6 w-6 object-contain"
+                          className="h-8 w-8 object-contain"
                         />
                       </td>
                       <td className="p-4 font-semibold text-foreground">

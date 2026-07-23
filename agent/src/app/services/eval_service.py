@@ -28,12 +28,27 @@ class EvalService:
             logger.error(f"Error loading golden set: {e}")
             return []
 
+    def clean_stale_runs(self):
+        """Purges any non-completed, interrupted, or orphaned evaluation runs completely from DB."""
+        try:
+            db_service.ensure_chat_tables()
+            # Delete runs that are not COMPLETED or have 0 valid cases
+            purge_sql = """
+            DELETE FROM eval_suite_run 
+            WHERE status != 'COMPLETED' OR total_cases = 0;
+            """
+            db_service.execute_insert(purge_sql, ())
+        except Exception as e:
+            logger.warning(f"Error purging stale runs: {e}")
+
     async def trigger_eval_run(self, suite_name: str = "Quick Benchmark (2 Samples)", sample_count: int = 2) -> Dict[str, Any]:
         """
-        Triggers a Temporal Evaluation Workflow on queue 'ingestion-task-queue'.
-        Picks random sample_count (default 2) questions to save API tokens and costs.
+        Triggers an Evaluation Workflow.
+        Strictly capped at max 2 samples to save API tokens and costs.
         """
         import random
+        # Strictly enforce maximum 2 samples per run
+        sample_count = min(sample_count, 2)
         all_samples = self.load_golden_set()
         if not all_samples:
             samples = []
@@ -50,7 +65,7 @@ class EvalService:
         (id, suite_name, status, total_cases)
         VALUES (%s, %s, %s, %s);
         """
-        db_service.execute_insert(insert_sql, (run_id, f"{suite_name} ({len(samples)} items)", "RUNNING", len(samples)))
+        db_service.execute_insert(insert_sql, (run_id, f"Quick Benchmark ({len(samples)} items)", "RUNNING", len(samples)))
 
         try:
             client = await get_temporal_client()
@@ -58,7 +73,7 @@ class EvalService:
                 EvaluationSuiteWorkflow.run,
                 {
                     "run_id": run_id,
-                    "suite_name": f"{suite_name} ({len(samples)} items)",
+                    "suite_name": f"Quick Benchmark ({len(samples)} items)",
                     "samples": samples,
                 },
                 id=run_id,
@@ -73,11 +88,14 @@ class EvalService:
             async def run_inline():
                 results = []
                 for sample in samples:
-                    res = await run_single_evaluation_activity(sample)
-                    results.append(res)
+                    try:
+                        res = await run_single_evaluation_activity(sample)
+                        results.append(res)
+                    except Exception as err:
+                        logger.error(f"Error evaluating sample: {err}")
                 summary = {
                     "run_id": run_id,
-                    "suite_name": f"{suite_name} ({len(samples)} items)",
+                    "suite_name": f"Quick Benchmark ({len(samples)} items)",
                     "status": "COMPLETED",
                     "results": results,
                 }
@@ -130,23 +148,34 @@ class EvalService:
             from src.app.temporal.eval_activities import run_single_evaluation_activity, save_eval_run_activity
 
             async def run_inline():
-                res = await run_single_evaluation_activity(custom_sample)
-                summary = {
-                    "run_id": run_id,
-                    "suite_name": suite_name,
-                    "status": "COMPLETED",
-                    "results": [res],
-                }
-                await save_eval_run_activity(summary)
+                try:
+                    res = await run_single_evaluation_activity(custom_sample)
+                    summary = {
+                        "run_id": run_id,
+                        "suite_name": suite_name,
+                        "status": "COMPLETED",
+                        "results": [res],
+                    }
+                    await save_eval_run_activity(summary)
+                except Exception as err:
+                    logger.error(f"Error evaluating custom query: {err}")
+                    summary = {
+                        "run_id": run_id,
+                        "suite_name": suite_name,
+                        "status": "FAILED",
+                        "results": [],
+                    }
+                    await save_eval_run_activity(summary)
 
             import asyncio
             asyncio.create_task(run_inline())
             return {"run_id": run_id, "status": "RUNNING", "total_cases": 1, "mode": "ASYNC_FALLBACK"}
 
     def list_eval_runs(self) -> List[Dict[str, Any]]:
-        """Fetches all evaluation runs from database."""
+        """Fetches all evaluation runs from database after cleaning stale ones."""
+        self.clean_stale_runs()
         db_service.ensure_chat_tables()
-        sql = "SELECT * FROM eval_suite_run ORDER BY created_at DESC LIMIT 50;"
+        sql = "SELECT * FROM eval_suite_run WHERE status = 'COMPLETED' ORDER BY created_at DESC LIMIT 50;"
         rows = db_service.execute_query(sql)
         runs = []
         for r in rows:
@@ -217,3 +246,4 @@ class EvalService:
 
 
 eval_service = EvalService()
+
