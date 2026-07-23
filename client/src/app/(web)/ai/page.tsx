@@ -294,13 +294,15 @@ function AiPageContent() {
     setInput("");
   };
 
-  const handleCopy = async (content: string) => {
+  const handleCopy = async (content: string, isUser = false) => {
     try {
       await navigator.clipboard.writeText(content);
-      toast.success("Response copied to clipboard!");
+      toast.success(
+        isUser ? "Message copied to clipboard!" : "Response copied to clipboard!",
+      );
     } catch (err) {
       console.error("Failed to copy text: ", err);
-      toast.error("Failed to copy response.");
+      toast.error("Failed to copy text.");
     }
   };
 
@@ -653,7 +655,19 @@ function AiPageContent() {
                             </Bubble>
                           )}
                           <MessageFooter className="flex items-center gap-3 w-full mt-0.5 min-h-[24px]">
-                            <div className="flex items-center gap-2 text-neutral-700 text-xs font-medium">
+                            <div className="flex items-center gap-1.5 text-neutral-700 text-xs font-medium">
+                              {msg.role === "user" && msg.content && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 rounded-md text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 cursor-pointer shrink-0 transition-colors"
+                                  onClick={() => handleCopy(msg.content, true)}
+                                  title="Copy message"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              )}
                               <span>{msg.timestamp}</span>
                               {msg.duration !== undefined && (
                                 <span>

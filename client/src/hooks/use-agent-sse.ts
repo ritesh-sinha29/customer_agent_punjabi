@@ -34,7 +34,9 @@ export function useAgentSSE(threadId: string, userId: string) {
     if (!userId) return;
     const initializeMemoryRef = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/v1/agent/memory?user_id=${userId}`);
+        const res = await fetch(
+          `${BACKEND_URL}/api/v1/agent/memory?user_id=${userId}`,
+        );
         if (res.ok) {
           const memData = await res.json();
           const summaries = memData.episodic_summaries || [];
@@ -74,16 +76,13 @@ export function useAgentSSE(threadId: string, userId: string) {
       ]);
 
       try {
-        const response = await fetch(
-          "/api/v1/agent/chat/stream",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
+        const response = await fetch("/api/v1/agent/chat/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-        );
+          body: JSON.stringify(body),
+        });
 
         if (!response.ok) {
           throw new Error(`Failed to initiate stream: ${response.statusText}`);
@@ -202,7 +201,8 @@ export function useAgentSSE(threadId: string, userId: string) {
                     if (res.ok) {
                       const memData = await res.json();
                       const summaries = memData.episodic_summaries || [];
-                      const latestSummary = summaries[summaries.length - 1] || "";
+                      const latestSummary =
+                        summaries[summaries.length - 1] || "";
 
                       if (
                         latestSummary &&
