@@ -103,32 +103,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Merge to main') {
-            steps {
-                script {
-                    // In standard Jenkins Git jobs, env.GIT_BRANCH is populated instead of env.BRANCH_NAME
-                    def branchName = env.GIT_BRANCH ?: 'dev'
-                    if (branchName.contains('/')) {
-                        branchName = branchName.substring(branchName.lastIndexOf('/') + 1)
-                    }
-
-                    if (branchName != 'main' && branchName != 'master' && branchName != 'HEAD') {
-                        withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-                            sh """
-                                git config user.name "Jenkins CI"
-                                git config user.email "jenkins@ci.local"
-                                git checkout main
-                                git merge origin/${branchName}
-                                git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/ritesh-sinha29/customer_agent_punjabi.git main
-                            """
-                        }
-                    } else {
-                        echo "Skipping merge: Current branch is main, master, or HEAD (${branchName})"
-                    }
-                }
-            }
-        }
     }
 
     post {

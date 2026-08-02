@@ -14,6 +14,7 @@ from langfuse.langchain import CallbackHandler
 from src.app.services.db_service import db_service
 from src.app.services.semantic_cache_service import semantic_cache_service
 from src.app.services.translation_service import translation_service
+from src.app.services.deepeval_server_evaluator import trigger_live_deepeval
 
 logger = logging.getLogger("AgentChatApi")
 router = APIRouter(
@@ -299,6 +300,9 @@ async def chat_endpoint(req: ChatRequest):
         # Trigger background memory check if message count is a multiple of 3
         await trigger_background_memory_workflow(req.user_id, req.thread_id)
         
+        # Trigger background DeepEval metrics evaluation (0 added latency to user response)
+        trigger_live_deepeval(req.message, reply, final_state)
+
         return {
             "success": True,
             "status": "completed",
@@ -496,6 +500,9 @@ async def chat_stream_endpoint(req: ChatRequest):
                 # Trigger background memory check if message count is a multiple of 3
                 await trigger_background_memory_workflow(req.user_id, req.thread_id)
                 
+                # Trigger background DeepEval metrics evaluation (0 added latency)
+                trigger_live_deepeval(req.message, reply, new_state.values)
+
                 payload = {
                     "type": "completed",
                     "status": "completed",
