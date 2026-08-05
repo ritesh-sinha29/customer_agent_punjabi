@@ -1,0 +1,32 @@
+# Colang 1.0 definition file for NeMo Guardrails
+
+define user express greeting
+  "hello"
+  "hi"
+  "hey"
+  "good morning"
+
+define bot express greeting
+  "Hello! How can I help you today?"
+
+define flow greeting
+  user express greeting
+  bot express greeting
+
+# Input Rail: Self Check Input for Jailbreak / Prompt Injection
+define subflow self check input
+  $is_unauthorized = execute self_check_input
+  if $is_unauthorized
+    bot refuse respond jailbreak
+    stop
+
+define bot refuse respond jailbreak
+  "I cannot assist with that request as it violates safety guidelines or attempts to bypass security policies."
+
+# Input Rail: Masking PII (Emails, Phone Numbers)
+define subflow mask pii input
+  $user_input = execute mask_pii(text=$user_input)
+
+# Output Rail: Masking PII in Bot Response
+define subflow mask pii output
+  $bot_message = execute mask_pii(text=$bot_message)
