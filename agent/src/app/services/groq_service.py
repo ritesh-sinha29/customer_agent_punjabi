@@ -101,7 +101,7 @@ class GroqService:
         user_content = f"Existing Facts:\n{json.dumps(current_facts)}\n\nConversation History:\n{conversation_str}"
 
         payload = {
-            "model": "llama-3.3-70b-versatile",
+            "model": "qwen/qwen3.6-27b",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}

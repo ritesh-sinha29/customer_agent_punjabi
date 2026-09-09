@@ -14,20 +14,13 @@ import asyncio
 import logging
 from typing import Any, Dict, List
 
-from deepeval.test_case import LLMTestCase, ToolCall
-from src.app.tests.deepeval_suite.metrics import (
-    faithfulness_metric,
-    answer_relevancy_metric,
-    contextual_precision_metric,
-    contextual_recall_metric,
-    tool_correctness_metric,
-)
-
 logger = logging.getLogger("DeepEvalServerEvaluator")
 
 
 def extract_eval_data_from_state(user_query: str, agent_reply: str, final_state: Dict[str, Any]) -> Dict[str, Any]:
     """Extracts retrieved contexts and tool calls from LangGraph state."""
+    from deepeval.test_case import ToolCall
+
     retrieved_contexts = []
     tools_called = []
 
@@ -44,9 +37,9 @@ def extract_eval_data_from_state(user_query: str, agent_reply: str, final_state:
                 elif isinstance(chunk, dict) and "text" in chunk:
                     retrieved_contexts.append(chunk["text"])
 
-        # Extract subagent tool calls
+        # Extract subagent tool calls (deduplicated by subagent name)
         subagent_name = item.get("subagent")
-        if subagent_name:
+        if subagent_name and subagent_name not in [t.name for t in tools_called]:
             tools_called.append(
                 ToolCall(
                     name=subagent_name,
@@ -68,6 +61,15 @@ async def evaluate_live_chat_background(user_query: str, agent_reply: str, final
     Does not block the user response.
     """
     try:
+        from deepeval.test_case import LLMTestCase
+        from src.app.tests.deepeval_suite.metrics import (
+            faithfulness_metric,
+            answer_relevancy_metric,
+            contextual_precision_metric,
+            contextual_recall_metric,
+            tool_correctness_metric,
+        )
+
         data = extract_eval_data_from_state(user_query, agent_reply, final_state)
         
         # Build DeepEval LLMTestCase for live chat
@@ -99,8 +101,17 @@ async def evaluate_live_chat_background(user_query: str, agent_reply: str, final
         scores = {}
         for metric in metrics_to_run:
             try:
-                # Measure metric asynchronously or in thread pool
-                await asyncio.to_thread(metric.measure, test_case)
+                # Force async_mode to False to prevent nested event loop deadlocks
+                metric.async_mode = False
+                
+                # Measure metric in thread without animated progress bar spinner
+                def measure_sync(m=metric, tc=test_case):
+                    try:
+                        return m.measure(tc, _show_indicator=False)
+                    except TypeError:
+                        return m.measure(tc)
+
+                await asyncio.to_thread(measure_sync)
                 metric_name = metric.__class__.__name__
                 scores[metric_name] = {
                     "score": round(metric.score, 4) if metric.score is not None else 0.0,
@@ -109,6 +120,7 @@ async def evaluate_live_chat_background(user_query: str, agent_reply: str, final
                 }
             except Exception as me:
                 logger.warning(f"Metric {metric.__class__.__name__} failed during live eval: {me}")
+
 
         print("\n" + "=" * 70)
         print(f" LIVE CHAT DEEPEVAL RESULTS [Query: '{user_query}']")

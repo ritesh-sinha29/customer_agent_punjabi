@@ -53,7 +53,7 @@ class LLMCircuitBreaker:
         if self._fallback_llm is None and GROQ_API_KEY:
             try:
                 self._fallback_llm = ChatOpenAI(
-                    model="llama-3.3-70b-versatile",
+                    model="qwen/qwen3.6-27b",
                     openai_api_base="https://api.groq.com/openai/v1",
                     openai_api_key=GROQ_API_KEY,
                     temperature=0.2,

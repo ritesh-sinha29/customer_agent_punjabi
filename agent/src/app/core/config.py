@@ -28,8 +28,11 @@ class Settings:
     EMBEDDING_API_URL: str = os.getenv("EMBEDDING_API_URL", "")
     UPSTASH_REDIS_URL: str = os.getenv("UPSTASH_REDIS_URL", "")
     JINA_API_KEY: str = os.getenv("JINA_API_KEY", "")
+    COHERE_API_KEY: str = os.getenv("COHERE_API_KEY", "cohere_TGnUy6kqm2cLp8rQg5K4xmLQR10u11U6NzlqevEp0wXeF1")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_ROUTER_MODEL: str = os.getenv("GROQ_ROUTER_MODEL", "openai/gpt-oss-20b")
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
-
+    TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
 
 
 settings = Settings()

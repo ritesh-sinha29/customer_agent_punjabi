@@ -59,6 +59,20 @@ class DbService:
             logger.error(f"Error executing insert '{query}': {e}")
             return None
 
+    async def aexecute_query(self, query: str, params: tuple = ()) -> list[dict]:
+        """
+        Executes a SELECT query asynchronously in a threadpool worker.
+        """
+        import asyncio
+        return await asyncio.to_thread(self.execute_query, query, params)
+
+    async def aexecute_insert(self, query: str, params: tuple = ()) -> dict | None:
+        """
+        Executes an INSERT/UPDATE query asynchronously in a threadpool worker.
+        """
+        import asyncio
+        return await asyncio.to_thread(self.execute_insert, query, params)
+
     def ensure_chat_tables(self):
         """
         Ensures that chat_thread and chat_message tables exist in the database.

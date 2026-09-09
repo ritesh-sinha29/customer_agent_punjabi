@@ -39,5 +39,5 @@ COPY main.py /app/main.py
 # Expose FastAPI default port
 EXPOSE 8000
 
-# Start app
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start app with production multi-workers
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -65,14 +66,24 @@ class SemanticCacheService:
 
     def _is_chit_chat_or_short(self, prompt: str) -> bool:
         """
-        Determines if a prompt is generic chit-chat, greeting, confirmation, or short query (< 4 words).
-        These queries bypass vector embedding generation to save 100% of embedding API costs.
+        Determines if a prompt is generic chit-chat, greeting, confirmation, or short query.
+        These queries bypass vector embedding generation to save 100% of embedding API costs and eliminate latency.
         """
-        clean = self._normalize_text(prompt)
+        clean = re.sub(r"[^\w\s]", "", self._normalize_text(prompt))
         words = clean.split()
         if len(words) < 4:
             return True
         
+        chit_chat_phrases = {
+            "hello how do u do", "hello how do you do", "hello how are you", "hi how are you",
+            "hey how are you", "how do you do", "how are you doing", "who are you", "what can you do",
+            "hello who are you", "hi who are you", "hey who are you", "good morning how are you",
+            "good evening how are you", "good afternoon how are you", "tell me about yourself",
+            "what is your name", "who created you"
+        }
+        if clean in chit_chat_phrases or any(phrase in clean for phrase in chit_chat_phrases):
+            return True
+            
         chit_chat_keywords = {
             "hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening",
             "thanks", "thank you", "ok", "okay", "bye", "goodbye", "yes confirm", "no cancel",

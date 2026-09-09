@@ -306,6 +306,11 @@ function AiPageContent() {
     setInput("");
   };
 
+  const handleSuggestionClick = (text: string) => {
+    if (!text || isLoading) return;
+    sendMessage(text);
+  };
+
   const handleCopy = async (content: string, isUser = false) => {
     try {
       await navigator.clipboard.writeText(content);
@@ -675,6 +680,41 @@ function AiPageContent() {
                                     </details>
                                   </div>
                                 )}
+                              {/* Minimal Web Search Sources Collapsible Component (Dynamic real-time counter, zero animation) */}
+                              {msg.searchResults &&
+                                msg.searchResults.length > 0 && (
+                                  <div className="mb-2 w-full max-w-full">
+                                    <details className="group text-xs text-neutral-800 bg-neutral-50/90 border border-neutral-200/80 rounded-xl p-3 select-none transition-all shadow-2xs">
+                                      <summary className="cursor-pointer flex items-center justify-between list-none outline-none font-medium text-neutral-800 [&::-webkit-details-marker]:hidden">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-semibold text-neutral-900 text-xs">
+                                            Searched {msg.searchResults.length} sources
+                                          </span>
+                                        </div>
+                                        <ChevronDown className="w-4 h-4 text-neutral-500 transition-transform duration-200 group-open:rotate-180 shrink-0" />
+                                      </summary>
+                                      <div className="mt-2.5 pt-2.5 border-t border-neutral-200/80 text-[11px] text-neutral-700 space-y-1.5 select-text">
+                                        {msg.searchResults.map((item, sIdx) => (
+                                          <div
+                                            key={sIdx}
+                                            className="flex items-center gap-2"
+                                          >
+                                            <span className="text-neutral-400 text-xs shrink-0">•</span>
+                                            <a
+                                              href={item.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-neutral-700 hover:text-emerald-800 hover:underline font-normal truncate max-w-full"
+                                              title={item.title}
+                                            >
+                                              {item.title}
+                                            </a>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </details>
+                                  </div>
+                                )}
                             </>
                           )}
                           {msg.approvalCard && (
@@ -861,6 +901,28 @@ function AiPageContent() {
                               </div>
                             )}
                           </MessageFooter>
+                          {msg.role === "assistant" &&
+                            !isLoading &&
+                            msg.suggestedActions &&
+                            msg.suggestedActions.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-zinc-100">
+                                {msg.suggestedActions
+                                  .slice(0, 3)
+                                  .map((actionText, idx) => (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() =>
+                                        handleSuggestionClick(actionText)
+                                      }
+                                      disabled={isLoading}
+                                      className="px-3 py-1.5 text-xs font-medium text-[#2E3A2F] bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/80 rounded-full transition-all duration-200 cursor-pointer shadow-2xs hover:shadow-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <span>{actionText}</span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
                         </MessageContent>
                       </Message>
                     </MessageScrollerItem>
@@ -996,7 +1058,7 @@ function AiPageContent() {
             <div className="flex items-center justify-between border-t border-zinc-100/50 pt-2 mt-1 px-1">
               {/* Left actions */}
               <div className="flex items-center gap-1.5">
-                <Button
+                {/* <Button
                   type="button"
                   variant="ghost"
                   size="icon"
@@ -1005,7 +1067,7 @@ function AiPageContent() {
                   title="Attach file (decorative)"
                 >
                   <Paperclip className="w-4 h-4" />
-                </Button>
+                </Button> */}
                 <Button
                   type="button"
                   variant="ghost"

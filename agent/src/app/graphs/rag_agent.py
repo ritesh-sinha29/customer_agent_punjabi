@@ -67,9 +67,6 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
     if not last_user_query:
         last_user_query = "Vrsa Agrotech animal nutrition supplements and dairy products"
 
-    print("\n" + "=" * 80)
-    print(f"[RAG SUB-AGENT] STEP 1: USER QUERY EXTRACTED -> '{last_user_query}'")
-
     # -------------------------------------------------------------------------
     # STEP 2: Multi-Query Expansion via QueryOptimizer (3 variations)
     # -------------------------------------------------------------------------
@@ -86,10 +83,6 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
         logger.error(f"[RAG Sub-Agent] Step 2 error: {e}. Using original query.")
         expanded_queries = [last_user_query]
 
-    print("\n[RAG SUB-AGENT] STEP 2: 3 QUERY EXPANSIONS (QueryOptimizer):")
-    for idx, q in enumerate(expanded_queries[:3], 1):
-        print(f"   {idx}. {q}")
-    
     logfire.info("Multi-query expansions generated", original=last_user_query, expansions=expanded_queries[:3])
 
     # -------------------------------------------------------------------------
@@ -110,14 +103,10 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
             return_vector=True
         )
         
-        print(f"\n[RAG SUB-AGENT] STEP 5: TOP RERANKED CHUNKS RETURNED ({len(retrieved_matches)}):")
         for idx, match in enumerate(retrieved_matches, 1):
             text = match.get("metadata", {}).get("text", "") or match.get("metadata", {}).get("content", "")
-            score = match.get("score", 0.0)
             if text:
                 reranked_chunks.append(text)
-                snippet = text[:140].replace("\n", " ") + "..." if len(text) > 140 else text
-                print(f"   Chunk #{idx} [Rerank Score: {score:.4f}]: {snippet}")
 
     except Exception as e:
         logger.error(f"[RAG Sub-Agent] Step 3-5 error: {e}")
@@ -133,9 +122,6 @@ async def run_rag_agent(state: SupervisorState) -> Dict[str, Any]:
         "rag_dense_vec": rag_dense_vec
     }
     existing_facts.append(payload)
-
-    print(f"\n[RAG SUB-AGENT] STEP 6: Sent {len(reranked_chunks)} reranked chunks to Supervisor State -> Next: 'supervisor_sales_agent'")
-    print("=" * 80 + "\n")
 
     return {
         "internal_facts": existing_facts,

@@ -136,13 +136,13 @@ class RerankingService:
         if not candidates:
             return []
 
-        # 2. Call Jina Reranker if key present
-        if self.jina_api_key:
-            reranked = await self.rerank_jina(query, candidates, top_n=top_n)
-            if reranked is not None:
-                return reranked
+        # 2. (Commented out - Jina reranking removed in favor of pure RRF fusion)
+        # if self.jina_api_key:
+        #     reranked = await self.rerank_jina(query, candidates, top_n=top_n)
+        #     if reranked is not None:
+        #         return reranked
 
-        # 3. Fallback to Local RRF
+        # 3. Perform Reciprocal Rank Fusion (RRF)
         return self.rerank_rrf(results_lists, top_n=top_n)
 
 

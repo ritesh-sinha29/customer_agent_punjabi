@@ -16,27 +16,23 @@ class PineconeService:
         self.index = None
         self.supports_sparse = True
 
-        if self.api_key:
-            try:
-                self.pc = Pinecone(api_key=self.api_key, pool_threads=30)
-                # Note: We do not initialize the index immediately if it needs to be created
-                if self.index_name:
-                    self.initialize_index()
-            except Exception as e:
-                logger.error(f"Error initializing Pinecone: {e}")
-
     def initialize_index(self):
         """
         Attempts to bind to the specified index.
         """
         try:
-            self.index = self.pc.Index(self.index_name, pool_threads=30)
+            if not self.pc and self.api_key:
+                self.pc = Pinecone(api_key=self.api_key, pool_threads=30)
+            if self.pc and self.index_name and not self.index:
+                self.index = self.pc.Index(self.index_name, pool_threads=30)
         except Exception as e:
             logger.warning(
                 f"Index '{self.index_name}' could not be bound (may not exist yet): {e}"
             )
 
     def get_index(self):
+        if not self.index:
+            self.initialize_index()
         return self.index
 
     def ensure_index(self, dimension: int = 1024, metric: str = "dotproduct") -> bool:
@@ -87,7 +83,8 @@ class PineconeService:
         Deletes all vector chunks matching a specific doc_id from a namespace.
         Ensures old versions of a document do not leave orphan/stale chunks.
         """
-        if not self.index:
+        idx_handle = self.get_index()
+        if not idx_handle:
             logger.error("Pinecone index is not initialized.")
             return False
 
@@ -96,7 +93,7 @@ class PineconeService:
         )
         try:
             # Delete by metadata filter
-            self.index.delete(filter={"doc_id": {"$eq": doc_id}}, namespace=namespace)
+            idx_handle.delete(filter={"doc_id": {"$eq": doc_id}}, namespace=namespace)
             logger.info(f"[Step 6 - Pinecone] Purge completed for doc_id={doc_id}")
             return True
         except Exception as e:
@@ -108,7 +105,8 @@ class PineconeService:
         Deletes all vector chunks matching a specific user_id from a namespace.
         Used for purging and rebuilding user memory.
         """
-        if not self.index:
+        idx_handle = self.get_index()
+        if not idx_handle:
             logger.error("Pinecone index is not initialized.")
             return False
 
@@ -117,7 +115,7 @@ class PineconeService:
         )
         try:
             # Delete by metadata filter
-            self.index.delete(filter={"user_id": {"$eq": user_id}}, namespace=namespace)
+            idx_handle.delete(filter={"user_id": {"$eq": user_id}}, namespace=namespace)
             logger.info(f"[Step 6 - Pinecone] Purge completed for user_id={user_id}")
             return True
         except Exception as e:
@@ -137,7 +135,8 @@ class PineconeService:
             "metadata": Dict[str, Any]
         }
         """
-        if not self.index:
+        idx_handle = self.get_index()
+        if not idx_handle:
             raise RuntimeError("Pinecone index is not initialized.")
 
         if not vectors:
@@ -170,7 +169,7 @@ class PineconeService:
                             item["sparse_values"] = sparse_val
                     upsert_payload.append(item)
 
-                res = self.index.upsert(vectors=upsert_payload, namespace=namespace)
+                res = idx_handle.upsert(vectors=upsert_payload, namespace=namespace)
                 total_upserted += res.get("upserted_count", len(batch))
 
             logger.info(
@@ -193,7 +192,8 @@ class PineconeService:
         Queries Pinecone index with dense and sparse vectors (hybrid search).
         Returns a list of matching records with metadata.
         """
-        if not self.index:
+        idx_handle = self.get_index()
+        if not idx_handle:
             raise RuntimeError("Pinecone index is not initialized.")
         
         target_namespace = namespace if namespace is not None else "default"
@@ -211,23 +211,24 @@ class PineconeService:
                 if sparse_vector.get("indices") and sparse_vector.get("values"):
                     query_args["sparse_vector"] = sparse_vector
                 
-            res = self.index.query(**query_args)
+            res = idx_handle.query(**query_args)
             return [match.to_dict() for match in res.get("matches", [])]
         except Exception as e:
             if "sparse" in str(e).lower() and "sparse_vector" in query_args:
                 logger.warning("Pinecone index does not support sparse values. Caching capability and retrying with dense-only query.")
                 self.supports_sparse = False
                 query_args.pop("sparse_vector", None)
-                res = self.index.query(**query_args)
+                res = idx_handle.query(**query_args)
                 return [match.to_dict() for match in res.get("matches", [])]
             logger.error(f"Error querying Pinecone: {e}")
             raise e
 
     def check_connection(self) -> bool:
-        if not self.pc or not self.index:
+        idx_handle = self.get_index()
+        if not self.pc or not idx_handle:
             return False
         try:
-            self.index.describe_index_stats()
+            idx_handle.describe_index_stats()
             return True
         except Exception as e:
             logger.warning(f"Pinecone connection check failed: {e}")

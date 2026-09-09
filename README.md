@@ -29,7 +29,7 @@
 ## 🏛️ System Architecture Overview
 
 <div align="center">
-  <img src="../client/public/image.png" alt="VRSA-AGRO Enterprise Platform Architecture" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
+  <img src="client/public/image.png" alt="VRSA-AGRO Enterprise Platform Architecture" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
 </div>
 
 The **VRSA-AGRO Bilingual Multi-Agent Platform** is an enterprise-grade AI ecosystem engineered to serve regional farmers, veterinarians, and dairy commercial enterprises. Built to bridge complex veterinary nutritional science with localized linguistic realities, the platform orchestrates bilingual (**Gurmukhi Punjabi ↔ English**) conversational intelligence, resilient data ingestion pipelines, automated order fulfillment with Human-In-The-Loop validation, and enterprise safety guardrails.

@@ -17,7 +17,7 @@ pipeline {
                     branches: [[name: "*/dev"]], 
                     userRemoteConfigs: [[
                         credentialsId: 'github-creds', 
-                        url: 'https://github.com/ritesh-sinha29/customer_agent_punjabi'
+                        url: 'https://github.com/ronitrai27/customer_agent_punjabi'
                     ]]
                 ])
             }

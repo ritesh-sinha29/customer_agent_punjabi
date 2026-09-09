@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import os
 import re
 from typing import Any, Dict, List
 
@@ -40,6 +41,17 @@ class EmbeddingService:
                 logger.error(f"Failed to load local SentenceTransformer: {e}")
                 raise e
         return self._local_model
+
+    def preload_local_model(self):
+        """
+        Pre-loads local SentenceTransformer model into memory on server startup.
+        """
+        try:
+            self._get_local_model()
+            logger.info("SentenceTransformer pre-loaded and ready for zero-latency fallback.")
+        except Exception as e:
+            logger.warning(f"Could not pre-load SentenceTransformer model: {e}")
+
 
     async def get_dense_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
@@ -83,16 +95,56 @@ class EmbeddingService:
         #     except Exception as e:
         #         logger.error(f"OpenAI embedding generation failed: {e}. Falling back...")
 
-        # 1.5. Try Jina embedding (1024 dim) if configured
-        if settings.JINA_API_KEY:
+        # 1.5. (Commented out - Jina API expired)
+        # if settings.JINA_API_KEY:
+        #     logger.info(
+        #         "[Step 4 - Embedding] Generating dense embeddings using Jina (1024d)..."
+        #     )
+        #     try:
+        #         batch_size = 32
+        #         all_embeddings = []
+        #         headers = {
+        #             "Authorization": f"Bearer {settings.JINA_API_KEY}",
+        #             "Content-Type": "application/json",
+        #         }
+        #         if self._client is None:
+        #             self._client = httpx.AsyncClient(timeout=60.0)
+        #         for i in range(0, len(texts), batch_size):
+        #             batch = texts[i : i + batch_size]
+        #             response = await self._client.post(
+        #                 "https://api.jina.ai/v1/embeddings",
+        #                 headers=headers,
+        #                 json={
+        #                     "input": batch,
+        #                     "model": "jina-embeddings-v3",
+        #                     "dimensions": 1024,
+        #                 },
+        #             )
+        #             if response.status_code == 200:
+        #                 res_json = response.json()
+        #                 embeddings = [
+        #                     item["embedding"] for item in res_json.get("data", [])
+        #                 ]
+        #                 all_embeddings.extend(embeddings)
+        #             else:
+        #                 raise RuntimeError(
+        #                     f"Jina API request failed: {response.text}"
+        #                 )
+        #         return all_embeddings
+        #     except Exception as e:
+        #         logger.error(f"Jina embedding generation failed: {e}. Falling back...")
+
+        # 1.6. Try Cohere embedding (1024 dim) if configured
+        cohere_key = getattr(settings, "COHERE_API_KEY", os.getenv("COHERE_API_KEY", ""))
+        if cohere_key:
             logger.info(
-                "[Step 4 - Embedding] Generating dense embeddings using Jina (1024d)..."
+                "[Step 4 - Embedding] Generating dense embeddings using Cohere embed-multilingual-v3.0 (1024d)..."
             )
             try:
                 batch_size = 32
                 all_embeddings = []
                 headers = {
-                    "Authorization": f"Bearer {settings.JINA_API_KEY}",
+                    "Authorization": f"Bearer {cohere_key}",
                     "Content-Type": "application/json",
                 }
                 if self._client is None:
@@ -100,27 +152,32 @@ class EmbeddingService:
                 for i in range(0, len(texts), batch_size):
                     batch = texts[i : i + batch_size]
                     response = await self._client.post(
-                        "https://api.jina.ai/v1/embeddings",
+                        "https://api.cohere.com/v1/embed",
                         headers=headers,
                         json={
-                            "input": batch,
-                            "model": "jina-embeddings-v3",
-                            "dimensions": 1024,
+                            "texts": batch,
+                            "model": "embed-multilingual-v3.0",
+                            "input_type": "search_document",
+                            "embedding_types": ["float"]
                         },
                     )
                     if response.status_code == 200:
                         res_json = response.json()
-                        embeddings = [
-                            item["embedding"] for item in res_json.get("data", [])
-                        ]
-                        all_embeddings.extend(embeddings)
+                        embs = res_json.get("embeddings", {})
+                        if isinstance(embs, dict) and "float" in embs:
+                            batch_embeddings = embs["float"]
+                        elif isinstance(embs, list):
+                            batch_embeddings = embs
+                        else:
+                            batch_embeddings = [item["embedding"] for item in res_json.get("data", [])]
+                        all_embeddings.extend(batch_embeddings)
                     else:
                         raise RuntimeError(
-                            f"Jina API request failed: {response.text}"
+                            f"Cohere API request failed: {response.status_code} - {response.text}"
                         )
                 return all_embeddings
             except Exception as e:
-                logger.error(f"Jina embedding generation failed: {e}. Falling back...")
+                logger.error(f"Cohere embedding generation failed: {e}. Falling back...")
 
         # 2. If TEI / vLLM server is configured
         if self.api_url:

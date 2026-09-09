@@ -28,11 +28,30 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const userId = body?.user_id || "anonymous";
 
-    // Perform rate limit checks concurrently for maximum speed
-    const [minResult, dayResult] = await Promise.all([
-      minLimiter.limit(userId),
-      dayLimiter.limit(userId),
-    ]);
+    // Perform rate limit checks with 1s timeout safeguard so network latency to Upstash never hangs the user query
+    let minResult = { success: true, limit: 5, remaining: 5 };
+    let dayResult = { success: true, limit: 100, remaining: 100 };
+
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Rate limit check timeout")), 1000)
+      );
+
+      const limitPromise = Promise.all([
+        minLimiter.limit(userId),
+        dayLimiter.limit(userId),
+      ]);
+
+      const [mRes, dRes] = (await Promise.race([
+        limitPromise,
+        timeoutPromise,
+      ])) as [any, any];
+
+      minResult = mRes;
+      dayResult = dRes;
+    } catch (rlError) {
+      console.warn("Upstash rate limit check bypassed due to network timeout or error:", rlError);
+    }
 
     if (!minResult.success || !dayResult.success) {
       const errorMsg = !minResult.success

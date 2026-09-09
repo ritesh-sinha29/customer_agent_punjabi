@@ -6,7 +6,6 @@ from typing import List, Dict, Any
 
 from src.app.services.db_service import db_service
 from src.app.temporal.temporal_client import get_temporal_client
-from src.app.temporal.eval_workflows import EvaluationSuiteWorkflow
 
 logger = logging.getLogger("EvalService")
 
@@ -68,6 +67,8 @@ class EvalService:
         db_service.execute_insert(insert_sql, (run_id, f"Quick Benchmark ({len(samples)} items)", "RUNNING", len(samples)))
 
         try:
+            from src.app.temporal.eval_workflows import EvaluationSuiteWorkflow
+
             client = await get_temporal_client()
             await client.start_workflow(
                 EvaluationSuiteWorkflow.run,
@@ -131,6 +132,8 @@ class EvalService:
         db_service.execute_insert(insert_sql, (run_id, suite_name, "RUNNING", 1))
 
         try:
+            from src.app.temporal.eval_workflows import EvaluationSuiteWorkflow
+
             client = await get_temporal_client()
             await client.start_workflow(
                 EvaluationSuiteWorkflow.run,
