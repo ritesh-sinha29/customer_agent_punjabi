@@ -1,0 +1,1 @@
+An intelligent customer service agent with Punjabi language support. This project combines TypeScript and Python to deliver a multilingual chatbot system with advanced guardrail protections including PII detection, jailbreak prevention, and role-play social engineering attack mitigation.
